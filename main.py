@@ -22,7 +22,8 @@ try:
     db_url = os.environ.get("DATABASE_URL")
     if not db_url:
         raise ValueError("DATABASE_URL no configurada")
-    db_pool = pool.SimpleConnectionPool(1, 10, dsn=db_url, sslmode='require')
+    # REDUCIDO EL TAMAÑO DEL POOL PARA EVITAR EL ERROR "TOO MANY CONNECTIONS"
+    db_pool = pool.SimpleConnectionPool(1, 4, dsn=db_url, sslmode='require')
     app.logger.info("Pool de conexiones a DB creado.")
 except Exception as e:
     app.logger.error(f"Error al crear el pool de conexiones: {e}")
@@ -31,7 +32,8 @@ except Exception as e:
 def init_db():
     """Crea la tabla de sesiones si no existe."""
     if not db_pool:
-        raise ConnectionError("Pool de DB no disponible.")
+        # Este error es fatal, si no hay pool, la app no puede funcionar.
+        raise ConnectionError("El pool de conexiones a la base de datos no está disponible. La aplicación no puede iniciar.")
     conn = db_pool.getconn()
     try:
         with conn.cursor() as cur:
@@ -92,9 +94,10 @@ def delete_session(sender_id):
     finally:
         db_pool.putconn(conn)
 
-# --- Inicializar DB al arrancar ---
-with app.app_context():
-    init_db()
+# --- Inicializar DB solo si el pool se creó correctamente ---
+if db_pool:
+    with app.app_context():
+        init_db()
 
 # --- Contenido del Chatbot ---
 AVAILABLE_SERVICES = [
@@ -131,6 +134,12 @@ def whatsapp_reply():
     message_sid = request.values.get('MessageSid')
     resp = MessagingResponse()
     msg = resp.message()
+
+    # Manejo de error si el pool no se inicializó
+    if not db_pool:
+        app.logger.error("La petición no puede ser procesada porque no hay conexión a la base de datos.")
+        msg.body("Lo siento, el servicio no está disponible en este momento por un problema de conexión. Por favor, intenta más tarde.")
+        return str(resp)
 
     session = get_session(sender_id)
 
