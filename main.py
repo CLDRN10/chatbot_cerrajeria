@@ -10,6 +10,11 @@ load_dotenv() # Carga las variables de entorno desde el archivo .env
 
 app = Flask(__name__)
 
+# --- Ruta para el chequeo de salud de Clever Cloud ---
+@app.route("/")
+def index():
+    return "Application is running successfully!"
+
 # --- Lista de Servicios Disponibles ---
 AVAILABLE_SERVICES = [
     "Apertura de automóvil",
@@ -87,20 +92,20 @@ user_sessions = {}
 
 def get_summary_message(data):
     return (
-        f"----- RESUMEN DE TU SOLICITUD -----\n"
-        f"Nombre: {data['nombre']}\n"
-        f"Ciudad: {data['ciudad']}\n"
-        f"Dirección: {data['direccion']}\n"
-        f"Servicio: {data['detalle_servicio']}\n"
-        f"Método de pago: {data['metodo_pago']}\n\n"
-        "Escribe 'confirmar' para guardar, 'corregir' para cambiar algún dato, o 'salir' para cancelar."
+        f"""----- RESUMEN DE TU SOLICITUD -----\n"""
+        f"""Nombre: {data['nombre']}\n"""
+        f"""Ciudad: {data['ciudad']}\n"""
+        f"""Dirección: {data['direccion']}\n"""
+        f"""Servicio: {data['detalle_servicio']}\n"""
+        f"""Método de pago: {data['metodo_pago']}\n\n"""
+        """Escribe 'confirmar' para guardar, 'corregir' para cambiar algún dato, o 'salir' para cancelar."""
     )
 
 def get_service_list_message():
-    service_list = "¿Qué tipo de servicio de cerrajería necesitas?\n\n"
+    service_list = """¿Qué tipo de servicio de cerrajería necesitas?\n\n"""
     for i, service in enumerate(AVAILABLE_SERVICES, 1):
-        service_list += f"{i}. {service}\n"
-    service_list += "\nResponde solo con el número del servicio que necesitas."
+        service_list += f"""{i}. {service}\n"""
+    service_list += """\nResponde solo con el número del servicio que necesitas."""
     return service_list
 
 @app.route("/whatsapp", methods=['POST'])
@@ -151,7 +156,7 @@ def whatsapp_reply():
                     data['detalle_servicio'] = AVAILABLE_SERVICES[choice - 1]
                     is_valid = True
                 else:
-                    msg.body(f"Opción no válida. Por favor, elige un número entre 1 y {len(AVAILABLE_SERVICES)}.")
+                    msg.body(f"""Opción no válida. Por favor, elige un número entre 1 y {len(AVAILABLE_SERVICES)}.""")
                     session['field_to_correct'] = field_to_correct
             except ValueError:
                 msg.body("Respuesta no válida. Por favor, responde solo con el número del servicio.")
@@ -175,7 +180,7 @@ def whatsapp_reply():
     # --- Flujo Principal ---
     if state == 'awaiting_name':
         data['nombre'] = request.values.get('Body', '').strip().title()
-        msg.body(f"Gracias, {data['nombre']}. ¿En qué ciudad te encuentras? (Bucaramanga, Piedecuesta o Floridablanca)")
+        msg.body(f"""Gracias, {data['nombre']}. ¿En qué ciudad te encuentras? (Bucaramanga, Piedecuesta o Floridablanca)""")
         session['state'] = 'awaiting_city'
     elif state == 'awaiting_city':
         city = message_body
@@ -197,7 +202,7 @@ def whatsapp_reply():
                 msg.body("¿Cómo prefieres pagar? (Efectivo o Nequi)")
                 session['state'] = 'awaiting_payment_method'
             else:
-                msg.body(f"Opción no válida. Por favor, elige un número entre 1 y {len(AVAILABLE_SERVICES)}.")
+                msg.body(f"""Opción no válida. Por favor, elige un número entre 1 y {len(AVAILABLE_SERVICES)}.""")
         except ValueError:
             msg.body("Respuesta no válida. Por favor, responde solo con el número del servicio.")
     elif state == 'awaiting_payment_method':
@@ -216,7 +221,7 @@ def whatsapp_reply():
                 user_sessions.pop(sender_id, None)
             except Exception as e:
                 # Log the exception for debugging
-                app.logger.error(f"Error saving to database: {e}")
+                app.logger.error(f"""Error saving to database: {e}""")
                 msg.body("Hubo un error al guardar tu solicitud. Por favor, intenta de nuevo más tarde.")
         elif message_body == 'corregir':
             msg.body("¿Qué dato deseas corregir? (nombre, ciudad, direccion, servicio, pago)")
