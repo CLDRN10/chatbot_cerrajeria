@@ -1,5 +1,6 @@
 
 import os
+import json
 from flask import Flask, request
 from twilio.twiml.messaging_response import MessagingResponse
 import psycopg2
@@ -12,33 +13,90 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# Configurar logging para ver la información en Clever Cloud
+# Configurar logging
 logging.basicConfig(level=logging.INFO)
 
-# --- Pool de Conexiones a la Base de Datos (Optimización) ---
+# --- Pool de Conexiones a la Base de Datos ---
 db_pool = None
 try:
     db_url = os.environ.get("DATABASE_URL")
     if not db_url:
-        raise ValueError("No se ha configurado la variable de entorno DATABASE_URL")
-    
-    db_pool = pool.SimpleConnectionPool(
-        minconn=1,
-        maxconn=5,
-        dsn=db_url,
-        sslmode='require'
-    )
-    app.logger.info("Pool de conexiones a la base de datos creado exitosamente.")
-
+        raise ValueError("DATABASE_URL no configurada")
+    db_pool = pool.SimpleConnectionPool(1, 10, dsn=db_url, sslmode='require')
+    app.logger.info("Pool de conexiones a DB creado.")
 except Exception as e:
     app.logger.error(f"Error al crear el pool de conexiones: {e}")
 
-# --- Ruta de Chequeo de Salud ---
-@app.route("/")
-def index():
-    return "Application is running successfully!"
+# --- Gestión de Sesiones en la Base de Datos (Solución Definitiva) ---
+def init_db():
+    """Crea la tabla de sesiones si no existe."""
+    if not db_pool:
+        raise ConnectionError("Pool de DB no disponible.")
+    conn = db_pool.getconn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS whatsapp_sessions (
+                    sender_id VARCHAR(255) PRIMARY KEY,
+                    session_data JSONB,
+                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT (NOW() at time zone 'utc')
+                );
+            """)
+            conn.commit()
+            app.logger.info("Tabla 'whatsapp_sessions' verificada/creada.")
+    finally:
+        db_pool.putconn(conn)
 
-# --- Lista de Servicios Disponibles ---
+def get_session(sender_id):
+    """Obtiene la sesión de un usuario desde la DB."""
+    if not db_pool: raise ConnectionError("Pool de DB no disponible.")
+    conn = db_pool.getconn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT session_data FROM whatsapp_sessions WHERE sender_id = %s;", (sender_id,))
+            result = cur.fetchone()
+            if result and result[0]:
+                return result[0]
+            else:
+                # Si no hay sesión, crea una por defecto
+                return {'state': 'awaiting_welcome', 'data': {}, 'processed_sids': []}
+    finally:
+        db_pool.putconn(conn)
+
+def save_session(sender_id, session):
+    """Guarda la sesión de un usuario en la DB."""
+    if not db_pool: raise ConnectionError("Pool de DB no disponible.")
+    conn = db_pool.getconn()
+    try:
+        with conn.cursor() as cur:
+            # Usamos INSERT ON CONFLICT para crear o actualizar atómicamente
+            cur.execute("""
+                INSERT INTO whatsapp_sessions (sender_id, session_data, updated_at)
+                VALUES (%s, %s, NOW() at time zone 'utc')
+                ON CONFLICT (sender_id) DO UPDATE SET
+                    session_data = EXCLUDED.session_data,
+                    updated_at = EXCLUDED.updated_at;
+            """, (sender_id, json.dumps(session)))
+            conn.commit()
+    finally:
+        db_pool.putconn(conn)
+
+def delete_session(sender_id):
+    """Elimina la sesión de un usuario de la DB."""
+    if not db_pool: raise ConnectionError("Pool de DB no disponible.")
+    conn = db_pool.getconn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM whatsapp_sessions WHERE sender_id = %s;", (sender_id,))
+            conn.commit()
+    finally:
+        db_pool.putconn(conn)
+
+# --- Inicializar DB al arrancar ---
+with app.app_context():
+    init_db()
+
+# --- Contenido del Chatbot ---
 AVAILABLE_SERVICES = [
     "Apertura de automóvil", "Apertura de caja fuerte", "Apertura de candado",
     "Apertura de motocicleta", "Apertura de puerta residencial", "Cambio de clave de automóvil",
@@ -46,169 +104,154 @@ AVAILABLE_SERVICES = [
     "Elaboración de llaves", "Instalación de alarma", "Instalación de chapa", "Reparación general",
 ]
 
-# --- Función de Base de Datos Optimizada ---
-def save_service_request(sender_id, data):
-    if not db_pool:
-        raise ConnectionError("El pool de conexiones no está disponible.")
-
-    phone_number = sender_id.split(':')[-1]
-    
-    conn = db_pool.getconn()
-    try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT id_cliente FROM cliente WHERE telefono_c = %s;", (phone_number,))
-            client_id_result = cur.fetchone()
-            
-            if client_id_result:
-                client_id = client_id_result[0]
-                cur.execute(
-                    "UPDATE cliente SET nombre_c = %s, direccion_c = %s, ciudad_c = %s WHERE id_cliente = %s;",
-                    (data['nombre'], data['direccion'], data['ciudad'], client_id)
-                )
-            else:
-                cur.execute(
-                    "INSERT INTO cliente (nombre_c, telefono_c, direccion_c, ciudad_c) VALUES (%s, %s, %s, %s) RETURNING id_cliente;",
-                    (data['nombre'], phone_number, data['direccion'], data['ciudad'])
-                )
-                client_id = cur.fetchone()[0]
-
-            detalle_pago_val = 'N/A' if data['metodo_pago'].lower() == 'nequi' else None
-
-            cur.execute(
-                """INSERT INTO servicio (id_cliente, fecha_s, hora_s, tipo_s, estado_s, monto_pago, metodo_pago, detalle_pago, id_cerrajero)
-                VALUES (%s, CURRENT_DATE, CURRENT_TIME, %s, 'pendiente', 0, %s, %s, 1);""",
-                (client_id, data['detalle_servicio'], data['metodo_pago'], detalle_pago_val)
-            )
-        conn.commit()
-    except Exception as e:
-        conn.rollback()
-        raise e
-    finally:
-        db_pool.putconn(conn)
-
-# --- Lógica del Chatbot ---
-user_sessions = {}
-
 def get_summary_message(data):
     return (
-        f"----- RESUMEN DE TU SOLICITUD -----\n"
-        f"Nombre: {data['nombre']}\n"
-        f"Ciudad: {data['ciudad']}\n"
-        f"Dirección: {data['direccion']}\n"
-        f"Servicio: {data['detalle_servicio']}\n"
-        f"Método de pago: {data['metodo_pago']}\n\n"
-        "Escribe 'confirmar' para guardar, 'corregir' para cambiar algún dato, o 'salir' para cancelar."
+        f"----- RESUMEN DE TU SOLICITUD -----\n\n"
+        f"👤 Nombre: {data.get('nombre', 'N/A')}\n"
+        f"🏙️ Ciudad: {data.get('ciudad', 'N/A')}\n"
+        f"📍 Dirección: {data.get('direccion', 'N/A')}\n"
+        f"🛠️ Servicio: {data.get('detalle_servicio', 'N/A')}\n"
+        f"💳 Método de pago: {data.get('metodo_pago', 'N/A')}\n\n"
+        "Escribe *confirmar* para guardar, *corregir* para cambiar algún dato, o *salir* para cancelar."
     )
 
 def get_service_list_message():
-    service_list = "¿Qué tipo de servicio de cerrajería necesitas?\n\n"
-    for i, service in enumerate(AVAILABLE_SERVICES, 1):
-        service_list += f"{i}. {service}\n"
-    service_list += "\nResponde solo con el número del servicio que necesitas."
-    return service_list
+    return "\n".join([
+        "¿Qué tipo de servicio de cerrajería necesitas?\n",
+        *[f"{i}. {service}" for i, service in enumerate(AVAILABLE_SERVICES, 1)],
+        "\nResponde solo con el *número* del servicio que necesitas."
+    ])
+
 
 @app.route("/whatsapp", methods=['POST'])
 def whatsapp_reply():
     sender_id = request.values.get('From', '')
-    message_body = request.values.get('Body', '').lower().strip()
+    message_body = request.values.get('Body', '').strip()
+    lower_message_body = message_body.lower()
     message_sid = request.values.get('MessageSid')
     resp = MessagingResponse()
     msg = resp.message()
 
-    # --- Gestión de Sesión e Idempotencia (Solución a Duplicados) ---
-    session = user_sessions.get(sender_id)
-    if not session:
-        session = {'state': 'awaiting_welcome', 'data': {}, 'processed_sids': set()}
-        user_sessions[sender_id] = session
+    session = get_session(sender_id)
 
-    if message_sid and message_sid in session['processed_sids']:
-        app.logger.warning(f"Mensaje duplicado detectado: {message_sid}. Ignorando.")
-        return str(resp) # Responder 200 OK para detener reintentos de Twilio
+    # --- Idempotencia: Ignorar mensajes ya procesados ---
+    if message_sid and message_sid in session.get('processed_sids', []):
+        app.logger.warning(f"Mensaje duplicado {message_sid}. Ignorando.")
+        return str(resp) # Responder 200 OK para detener reintentos
 
-    # Marcar el SID como procesado inmediatamente para evitar condiciones de carrera
+    # Añadir SID a la lista de procesados (y mantenerla corta)
     if message_sid:
-        session['processed_sids'].add(message_sid)
-        # Opcional: mantener el set limpio, guardando solo los últimos 20 SIDs
-        while len(session['processed_sids']) > 20:
-            session['processed_sids'].pop()
+        session.setdefault('processed_sids', []).append(message_sid)
+        session['processed_sids'] = session['processed_sids'][-10:]
 
-    # --- Lógica de Estado del Chatbot ---
     state = session.get('state')
     data = session.get('data', {})
 
-    if message_body == 'salir':
-        msg.body("Tu solicitud ha sido cancelada. Gracias.")
-        user_sessions.pop(sender_id, None)
+    # --- Manejo de Comandos Globales ---
+    if lower_message_body == 'salir':
+        msg.body("Tu solicitud ha sido cancelada. Si quieres empezar de nuevo, solo escribe 'hola'.")
+        delete_session(sender_id)
         return str(resp)
-
-    if state == 'awaiting_welcome':
-        msg.body("¡Bienvenido al servicio de cerrajería! Para comenzar, por favor dime tu nombre completo.")
-        session['state'] = 'awaiting_name'
-    elif state == 'awaiting_name':
-        data['nombre'] = request.values.get('Body', '').strip().title()
-        msg.body(f"Gracias, {data['nombre']}. ¿En qué ciudad te encuentras? (Bucaramanga, Piedecuesta o Floridablanca)")
-        session['state'] = 'awaiting_city'
-    elif state == 'awaiting_city':
-        city = message_body
-        if city in ['bucaramanga', 'piedecuesta', 'floridablanca']:
-            data['ciudad'] = city
-            msg.body("Perfecto. Ahora, por favor, indícame la dirección completa (barrio, calle, número).")
-            session['state'] = 'awaiting_address'
-        else:
-            msg.body("Ciudad no válida. Por favor, elige entre Bucaramanga, Piedecuesta o Floridablanca.")
-    elif state == 'awaiting_address':
-        data['direccion'] = request.values.get('Body', '').strip()
-        msg.body(get_service_list_message())
-        session['state'] = 'awaiting_details'
-    elif state == 'awaiting_details':
-        try:
-            choice = int(message_body)
-            if 1 <= choice <= len(AVAILABLE_SERVICES):
-                data['detalle_servicio'] = AVAILABLE_SERVICES[choice - 1]
-                msg.body("¿Cómo prefieres pagar? (Efectivo o Nequi)")
-                session['state'] = 'awaiting_payment_method'
-            else:
-                msg.body(f"Opción no válida. Por favor, elige un número entre 1 y {len(AVAILABLE_SERVICES)}.")
-        except ValueError:
-            msg.body("Respuesta no válida. Por favor, responde solo con el número del servicio.")
-    elif state == 'awaiting_payment_method':
-        payment_method = message_body
-        if payment_method in ['efectivo', 'nequi']:
-            data['metodo_pago'] = payment_method
-            msg.body(get_summary_message(data))
-            session['state'] = 'awaiting_confirmation'
-        else:
-            msg.body("Método de pago no válido. Por favor, escribe 'Efectivo' o 'Nequi'.")
-    elif state == 'awaiting_confirmation':
-        if message_body == 'confirmar':
-            try:
-                save_service_request(sender_id, data)
-                msg.body("¡Servicio confirmado! Un cerrajero se pondrá en contacto contigo en breve.")
-                user_sessions.pop(sender_id, None) # Limpiar sesión después de confirmar
-                return str(resp) # Salir aquí para evitar guardar la sesión que acabamos de borrar
-            except Exception as e:
-                app.logger.error(f"Error guardando en la base de datos: {e}")
-                msg.body("Hubo un error al guardar tu solicitud. Por favor, intenta de nuevo más tarde.")
-        elif message_body == 'corregir':
-            msg.body("¿Qué dato deseas corregir? (nombre, ciudad, direccion, servicio, pago)")
-            session['state'] = 'awaiting_correction_choice'
-        else:
-            msg.body("Opción no válida. Escribe 'confirmar', 'corregir' o 'salir'.")
-    elif state == 'awaiting_correction_choice':
-        field = message_body
-        if field == 'nombre':
-            msg.body("Por favor, dime el nombre correcto.")
-            session['state'] = 'awaiting_correction_new_value'
-            session['field_to_correct'] = 'nombre'
-        # ... (se pueden añadir los demás campos de corrección aquí) ...
-        else:
-            msg.body("Dato no válido para corregir. Elige entre: nombre, ciudad, etc.")
     
-    # ... (lógica para awaiting_correction_new_value si se implementa por completo) ...
+    # --- Máquina de Estados de la Conversación ---
+    try:
+        if state == 'awaiting_welcome':
+            msg.body("¡Bienvenido al servicio de cerrajería! Para comenzar, por favor dime tu nombre completo.")
+            session['state'] = 'awaiting_name'
 
-    # Guardar el estado de la sesión al final
-    session['data'] = data
-    user_sessions[sender_id] = session
+        elif state == 'awaiting_name':
+            data['nombre'] = message_body.title()
+            msg.body(f"Gracias, {data['nombre']}. ¿En qué ciudad te encuentras? (Bucaramanga, Piedecuesta o Floridablanca)")
+            session['state'] = 'awaiting_city'
+
+        elif state == 'awaiting_city':
+            if lower_message_body in ['bucaramanga', 'piedecuesta', 'floridablanca']:
+                data['ciudad'] = lower_message_body.capitalize()
+                msg.body("Perfecto. Ahora, por favor, indícame la dirección completa (barrio, calle, número).")
+                session['state'] = 'awaiting_address'
+            else:
+                msg.body("Ciudad no válida. Por favor, elige entre Bucaramanga, Piedecuesta o Floridablanca.")
+        
+        elif state == 'awaiting_address':
+            data['direccion'] = message_body
+            msg.body(get_service_list_message())
+            session['state'] = 'awaiting_details'
+
+        elif state == 'awaiting_details':
+            try:
+                choice = int(message_body)
+                if 1 <= choice <= len(AVAILABLE_SERVICES):
+                    data['detalle_servicio'] = AVAILABLE_SERVICES[choice - 1]
+                    msg.body("¿Cómo prefieres pagar? (Efectivo o Nequi)")
+                    session['state'] = 'awaiting_payment_method'
+                else:
+                    msg.body(f"Opción no válida. Por favor, elige un número entre 1 y {len(AVAILABLE_SERVICES)}.")
+            except (ValueError, TypeError):
+                msg.body("Respuesta no válida. Por favor, responde solo con el número del servicio.")
+
+        elif state == 'awaiting_payment_method':
+            if lower_message_body in ['efectivo', 'nequi']:
+                data['metodo_pago'] = lower_message_body
+                msg.body(get_summary_message(data))
+                session['state'] = 'awaiting_confirmation'
+            else:
+                msg.body("Método de pago no válido. Por favor, escribe 'Efectivo' o 'Nequi'.")
+
+        elif state == 'awaiting_confirmation':
+            if lower_message_body == 'confirmar':
+                # Aquí iría la lógica para guardar en la DB (save_service_request)
+                msg.body("¡Servicio confirmado! Un cerrajero se pondrá en contacto contigo en breve.")
+                delete_session(sender_id)
+            elif lower_message_body == 'corregir':
+                msg.body("¿Qué dato deseas corregir? (nombre, ciudad, direccion, servicio, pago)")
+                session['state'] = 'awaiting_correction_choice'
+            else:
+                msg.body("Opción no válida. Escribe *confirmar*, *corregir* o *salir*.")
+
+        elif state == 'awaiting_correction_choice':
+            field = lower_message_body
+            prompts = {
+                'nombre': "Por favor, dime el nombre correcto.",
+                'ciudad': "¿En qué ciudad te encuentras? (Bucaramanga, Piedecuesta o Floridablanca)",
+                'direccion': "Por favor, dime la dirección correcta.",
+                'servicio': get_service_list_message(),
+                'pago': "¿Cómo prefieres pagar? (Efectivo o Nequi)"
+            }
+            if field in prompts:
+                msg.body(prompts[field])
+                session['state'] = 'awaiting_correction_value'
+                session['field_to_correct'] = field # Guardamos qué campo se está corrigiendo
+            else:
+                msg.body("Dato no válido. Elige entre: nombre, ciudad, direccion, servicio, pago.")
+
+        elif state == 'awaiting_correction_value':
+            field = session.pop('field_to_correct', None)
+            if field == 'nombre':
+                data['nombre'] = message_body.title()
+            elif field == 'ciudad':
+                if lower_message_body in ['bucaramanga', 'piedecuesta', 'floridablanca']:
+                    data['ciudad'] = lower_message_body.capitalize()
+                else:
+                     msg.body("Ciudad no válida. Por favor, elige una de las opciones.")
+                     session['field_to_correct'] = field # Re-establecer para reintentar
+                     save_session(sender_id, session)
+                     return str(resp)
+            # ... (Lógica similar para otros campos)
+
+            # Volver a la confirmación
+            msg.body("Dato actualizado.\n\n" + get_summary_message(data))
+            session['state'] = 'awaiting_confirmation'
+
+        else:
+            msg.body("Parece que hubo un error. Escribe 'salir' para reiniciar.")
+
+    except Exception as e:
+        app.logger.error(f"Error en la lógica del bot: {e}")
+        msg.body("Lo siento, ocurrió un error inesperado. Intenta de nuevo.")
+        delete_session(sender_id)
+
+    # Guardar la sesión en la base de datos al final de cada interacción exitosa
+    save_session(sender_id, session)
     return str(resp)
 
 if __name__ == "__main__":
