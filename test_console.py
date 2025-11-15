@@ -2,28 +2,25 @@
 import os
 import json
 import psycopg2
-from urllib.parse import urlparse
 from dotenv import load_dotenv
 import logging
-from flask import Flask, request
-from twilio.twiml.messaging_response import MessagingResponse
+import uuid
 
-# --- Configuración Inicial ---
+# --- Configuración ---
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
-app = Flask(__name__)
 
-# --- Helpers de Base de Datos (Modelo sin Pool) ---
+# ID de usuario para esta simulación. Puedes cambiarlo si quieres simular ser otro usuario.
+SENDER_ID = "console-user-1"
+
+# --- Copia de la Lógica de Base de Datos (de main.py) ---
 def get_db_connection():
-    """Crea y retorna una nueva conexión a la base de datos."""
     db_url = os.environ.get("DATABASE_URL")
     if not db_url:
-        raise ConnectionError("La variable de entorno DATABASE_URL no está configurada.")
+        raise ConnectionError("DATABASE_URL no configurada.")
     return psycopg2.connect(db_url, sslmode='require')
 
-# --- Gestión de Sesiones (Cada función maneja su propia conexión) ---
 def get_session(sender_id):
-    """Obtiene la sesión de un usuario. Abre y cierra su propia conexión."""
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
@@ -34,7 +31,6 @@ def get_session(sender_id):
         if conn: conn.close()
 
 def save_session(sender_id, session):
-    """Guarda la sesión de un usuario. Abre y cierra su propia conexión."""
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
@@ -50,7 +46,6 @@ def save_session(sender_id, session):
         if conn: conn.close()
 
 def delete_session(sender_id):
-    """Elimina la sesión de un usuario. Abre y cierra su propia conexión."""
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
@@ -59,8 +54,7 @@ def delete_session(sender_id):
     finally:
         if conn: conn.close()
 
-
-# --- Contenido del Chatbot ---
+# --- Copia de la Lógica de Conversación (de main.py) ---
 AVAILABLE_SERVICES = [
     "Apertura de automóvil", "Apertura de caja fuerte", "Apertura de candado",
     "Apertura de motocicleta", "Apertura de puerta residencial", "Cambio de clave de automóvil",
@@ -86,100 +80,74 @@ def get_service_list_message():
         "\nResponde solo con el *número* del servicio que necesitas."
     ])
 
-# --- Rutas de la Aplicación ---
-@app.route("/")
-def index():
-    """Ruta de 'health check' para que Clever Cloud sepa que la app está viva."""
-    return "OK", 200
-
-@app.route("/whatsapp", methods=['POST'])
-def whatsapp_reply():
-    sender_id = request.values.get('From', '')
-    message_body = request.values.get('Body', '').strip()
+def process_message(sender_id, message_body):
+    """El cerebro del bot. Procesa un mensaje y devuelve la respuesta."""
     lower_message_body = message_body.lower()
-    message_sid = request.values.get('MessageSid')
-    resp = MessagingResponse()
-    msg = resp.message()
+    # En la consola no tenemos SID, así que generamos uno falso para la idempotencia
+    message_sid = str(uuid.uuid4())
+    
+    session = get_session(sender_id)
 
-    try:
-        session = get_session(sender_id)
-    except psycopg2.OperationalError as e:
-        app.logger.error(f"CRITICAL_DB_ERROR: Could not connect to DB while processing a message. {e}")
-        msg.body("Lo siento, el servicio no está disponible por un problema de conexión. Por favor, intenta más tarde.")
-        return str(resp)
-    except Exception as e:
-        app.logger.error(f"UNEXPECTED_ERROR_WHATSAPP: {e}")
-        msg.body("Lo siento, ha ocurrido un error inesperado. Intenta de nuevo.")
-        return str(resp)
-
-    # Idempotency: Ignore already processed SIDs
-    if message_sid and message_sid in session.get('processed_sids', []):
-        app.logger.warning(f"Duplicate message SID {message_sid}. Ignoring.")
-        return str(resp)
-    if message_sid:
-        session.setdefault('processed_sids', []).append(message_sid)
-        session['processed_sids'] = session['processed_sids'][-10:]
+    # Idempotencia
+    if message_sid in session.get('processed_sids', []): return None # Ignorar duplicado
+    session.setdefault('processed_sids', []).append(message_sid)
+    session['processed_sids'] = session['processed_sids'][-10:]
 
     state = session.get('state')
     data = session.get('data', {})
-
-    # --- Global Commands Handling ---
-    # If the user wants to start over, reset the session.
-    if lower_message_body in ['hola', 'empezar', 'inicio']:
-        msg.body("¡Bienvenido al servicio de cerrajería! Para comenzar, por favor dime tu nombre completo.")
-        session = {'state': 'awaiting_name', 'data': {}, 'processed_sids': session.get('processed_sids', [])}
-        save_session(sender_id, session)
-        return str(resp)
+    response_message = ""
 
     if lower_message_body == 'salir':
-        msg.body("Tu solicitud ha sido cancelada. Si quieres empezar de nuevo, solo escribe 'hola'.")
+        response_message = "Tu solicitud ha sido cancelada. Si quieres empezar de nuevo, solo escribe 'hola'."
         delete_session(sender_id)
-        return str(resp)
+        return response_message
 
-    # --- Conversation State Machine ---
-    if state == 'awaiting_name':
+    if state == 'awaiting_welcome':
+        response_message = "¡Bienvenido al servicio de cerrajería! Para comenzar, dime tu nombre completo."
+        session['state'] = 'awaiting_name'
+    elif state == 'awaiting_name':
         data['nombre'] = message_body.title()
-        msg.body(f"Gracias, {data['nombre']}. ¿En qué ciudad te encuentras? (Bucaramanga, Piedecuesta o Floridablanca)")
+        response_message = f"Gracias, {data['nombre']}. ¿En qué ciudad te encuentras? (Bucaramanga, Piedecuesta o Floridablanca)"
         session['state'] = 'awaiting_city'
+    # ... (el resto de la máquina de estados)
     elif state == 'awaiting_city':
         if lower_message_body in ['bucaramanga', 'piedecuesta', 'floridablanca']:
             data['ciudad'] = lower_message_body.capitalize()
-            msg.body("Perfecto. Indícame la dirección completa (barrio, calle, número).")
+            response_message = "Perfecto. Indícame la dirección completa (barrio, calle, número)."
             session['state'] = 'awaiting_address'
         else:
-            msg.body("Ciudad no válida. Elige entre Bucaramanga, Piedecuesta o Floridablanca.")
+            response_message = "Ciudad no válida. Elige entre Bucaramanga, Piedecuesta o Floridablanca."
     elif state == 'awaiting_address':
         data['direccion'] = message_body
-        msg.body(get_service_list_message())
+        response_message = get_service_list_message()
         session['state'] = 'awaiting_details'
     elif state == 'awaiting_details':
         try:
             choice = int(message_body)
             if 1 <= choice <= len(AVAILABLE_SERVICES):
                 data['detalle_servicio'] = AVAILABLE_SERVICES[choice - 1]
-                msg.body("¿Cómo prefieres pagar? (Efectivo o Nequi)")
+                response_message = "¿Cómo prefieres pagar? (Efectivo o Nequi)"
                 session['state'] = 'awaiting_payment_method'
             else:
-                msg.body(f"Opción no válida. Elige un número del 1 al {len(AVAILABLE_SERVICES)}.")
+                response_message = f"Opción no válida. Elige un número del 1 al {len(AVAILABLE_SERVICES)}."
         except (ValueError, TypeError):
-            msg.body("Respuesta no válida. Usa solo el número del servicio.")
+            response_message = "Respuesta no válida. Usa solo el número del servicio."
     elif state == 'awaiting_payment_method':
         if lower_message_body in ['efectivo', 'nequi']:
             data['metodo_pago'] = lower_message_body
-            msg.body(get_summary_message(data))
+            response_message = get_summary_message(data)
             session['state'] = 'awaiting_confirmation'
         else:
-            msg.body("Método de pago no válido. Escribe 'Efectivo' o 'Nequi'.")
+            response_message = "Método de pago no válido. Escribe 'Efectivo' o 'Nequi'."
     elif state == 'awaiting_confirmation':
         if lower_message_body == 'confirmar':
-            # Logic to save the final service request to the DB would go here
-            msg.body("¡Servicio confirmado! Un cerrajero se pondrá en contacto contigo.")
+            response_message = "¡Servicio confirmado! Un cerrajero se pondrá en contacto contigo."
             delete_session(sender_id)
         elif lower_message_body == 'corregir':
-            msg.body("¿Qué dato deseas corregir? (nombre, ciudad, direccion, servicio, pago)")
+            response_message = "¿Qué dato deseas corregir? (nombre, ciudad, direccion, servicio, pago)"
             session['state'] = 'awaiting_correction_choice'
         else:
-            msg.body("Opción no válida. Escribe *confirmar*, *corregir* o *salir*.")
+            response_message = "Opción no válida. Escribe *confirmar*, *corregir* o *salir*."
     elif state == 'awaiting_correction_choice':
         field = lower_message_body
         prompts = {
@@ -190,29 +158,50 @@ def whatsapp_reply():
             'pago': "¿Cómo prefieres pagar? (Efectivo o Nequi)"
         }
         if field in prompts:
-            msg.body(prompts[field])
+            response_message = prompts[field]
             session['state'] = 'awaiting_correction_value'
             session['field_to_correct'] = field
         else:
-            msg.body("Dato no válido. Elige entre: nombre, ciudad, direccion, servicio, pago.")
+            response_message = "Dato no válido. Elige entre: nombre, ciudad, direccion, servicio, pago."
     elif state == 'awaiting_correction_value':
         field_to_correct = session.pop('field_to_correct', None)
-        if field_to_correct:
-            data[field_to_correct] = message_body
-        msg.body("Dato actualizado.\n\n" + get_summary_message(data))
+        data[field_to_correct] = message_body
+        response_message = "Dato actualizado.\n\n" + get_summary_message(data)
         session['state'] = 'awaiting_confirmation'
     else:
-        # Default case for unknown states or the initial 'awaiting_welcome'
-        msg.body("Lo siento, no entendí. Escribe 'hola' para empezar de nuevo.")
-        delete_session(sender_id) # Reset if the state is unknown
+        response_message = "Lo siento, no entendí. Escribe 'hola' para empezar."
+        delete_session(sender_id)
 
-    # Save the session at the end of a successful interaction
-    session['data'] = data
     save_session(sender_id, session)
-    return str(resp)
+    return response_message
 
-# --- Startup Block for Local Development ---
+
+# --- Bucle Principal de la Simulación ---
 if __name__ == "__main__":
-    # For local development, it's useful to have a way to init the DB.
-    # We'll create a separate script for that: init_database.py
-    app.run(debug=True, port=8080)
+    print("--- Simulador de Chatbot de Cerrajería ---")
+    print(f"ID de Sesión: {SENDER_ID}")
+    print("Escribe 'salir()' para terminar la simulación.")
+    print("---------------------------------------------")
+
+    # Iniciar la conversación
+    initial_response = process_message(SENDER_ID, "hola")
+    print(f"🤖 Bot: {initial_response}")
+
+    while True:
+        try:
+            user_input = input("🙂 Tú: ")
+            if user_input.lower() == 'salir()':
+                print("Simulación terminada.")
+                break
+            
+            bot_response = process_message(SENDER_ID, user_input)
+            if bot_response:
+                print(f"🤖 Bot: {bot_response}")
+
+        except KeyboardInterrupt:
+            print("\nSimulación terminada.")
+            break
+        except Exception as e:
+            print(f"Ha ocurrido un error: {e}")
+            logging.error(f"ERROR_SIMULATOR: {e}")
+            break
