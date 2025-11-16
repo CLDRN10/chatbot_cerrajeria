@@ -1,0 +1,263 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Servicios de Cerrajería</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            background-color: #f4f4f9;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+        #error-message {
+            background-color: #e74c3c;
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            text-align: center;
+            font-weight: bold;
+            display: none; /* Oculto por defecto */
+            margin-bottom: 20px;
+        }
+        .filters {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .filters input, .filters select {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        .table-container {
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px 15px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+        th {
+            background-color: #3498db;
+            color: white;
+            font-weight: bold;
+        }
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        tr:hover {
+            background-color: #ecf0f1;
+        }
+        @media (max-width: 768px) {
+            .filters {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            th, td {
+                padding: 10px 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Panel de Control de Servicios</h1>
+
+        <div id="error-message"></div>
+
+        <div class="filters">
+            <input type="text" id="filtro-nombre" placeholder="Filtrar por nombre de cliente...">
+            <input type="date" id="filtro-fecha">
+            <select id="filtro-estado">
+                <option value="">Todos los estados</option>
+                <option value="pendiente">Pendiente</option>
+                <option value="en_proceso">En Proceso</option>
+                <option value="completado">Completado</option>
+                <option value="cancelado">Cancelado</option>
+            </select>
+        </div>
+
+        <div class="table-container">
+            <table id="servicios-tabla">
+                <thead>
+                    <tr>
+                        <th>ID Servicio</th>
+                        <th>Cliente</th>
+                        <th>Dirección</th>
+                        <th>Ciudad</th>
+                        <th>Fecha</th>
+                        <th>Hora</th>
+                        <th>Tipo</th>
+                        <th>Estado</th>
+                        <th>Cerrajero Asignado</th>
+                    </tr>
+                </thead>
+                <tbody id="servicios-tbody">
+                    <!-- Las filas se insertarán aquí dinámicamente -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // --- Constantes y Configuración ---
+        const API_URL = '/api/servicios';
+        const tbody = document.getElementById('servicios-tbody');
+        const errorMessageDiv = document.getElementById('error-message');
+        const filtroNombre = document.getElementById('filtro-nombre');
+        const filtroFecha = document.getElementById('filtro-fecha');
+        const filtroEstado = document.getElementById('filtro-estado');
+        let todosLosServicios = []; // Caché para los datos de la API
+
+        // --- Funciones Principales ---
+
+        /**
+         * Carga los datos de los servicios desde la API.
+         */
+        async function cargarServiciosDesdeAPI() {
+            try {
+                // La URL es relativa, por lo que funcionará en cualquier dominio.
+                const response = await fetch(API_URL);
+
+                if (!response.ok) {
+                    // Intenta leer el error específico del cuerpo de la respuesta.
+                    const errorData = await response.json().catch(() => null);
+                    const errorMsg = errorData?.error_real || `Error HTTP: ${response.status}`;
+                    throw new Error(errorMsg);
+                }
+
+                const data = await response.json();
+                
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                todosLosServicios = data; // Almacena en caché
+                renderizarTabla(todosLosServicios); // Renderiza la tabla inicial
+                errorMessageDiv.style.display = 'none'; // Oculta errores previos
+
+            } catch (error) {
+                console.error("Error al cargar servicios desde la API:", error);
+                mostrarError(`Error al cargar servicios: ${error.message}`);
+            }
+        }
+
+        /**
+         * Muestra un mensaje de error en la interfaz.
+         */
+        function mostrarError(mensaje) {
+            errorMessageDiv.textContent = mensaje;
+            errorMessageDiv.style.display = 'block';
+            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color: #7f8c8d;">No se pudieron cargar los datos.</td></tr>';
+        }
+
+        /**
+         * Renderiza un array de servicios en la tabla HTML.
+         */
+        function renderizarTabla(servicios) {
+            tbody.innerHTML = ''; // Limpia la tabla antes de renderizar
+
+            if (!servicios || servicios.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color: #7f8c8d;">No hay servicios que mostrar.</td></tr>';
+                return;
+            }
+
+            servicios.forEach(servicio => {
+                const fila = `
+                    <tr>
+                        <td>${servicio.id_servicio}</td>
+                        <td>${servicio.nombre_cliente}</td>
+                        <td>${servicio.direccion_cliente}</td>
+                        <td>${servicio.ciudad_cliente}</td>
+                        <td>${formatearFecha(servicio.fecha)}</td>
+                        <td>${servicio.hora}</td>
+                        <td>${servicio.tipo}</td>
+                        <td>${servicio.estado}</td>
+                        <td>${servicio.nombre_cerrajero}</td>
+                    </tr>
+                `;
+                tbody.innerHTML += fila;
+            });
+        }
+
+        /**
+         * Aplica los filtros actuales a la lista de servicios en caché.
+         */
+        function aplicarFiltros() {
+            const nombre = filtroNombre.value.toLowerCase();
+            const fecha = filtroFecha.value;
+            const estado = filtroEstado.value;
+
+            const serviciosFiltrados = todosLosServicios.filter(s => {
+                const nombreMatch = s.nombre_cliente.toLowerCase().includes(nombre);
+                // Asegura que la fecha de la API (que puede tener formato UTC) se compara correctamente
+                const fechaMatch = !fecha || s.fecha.startsWith(fecha);
+                const estadoMatch = !estado || s.estado === estado;
+
+                return nombreMatch && fechaMatch && estadoMatch;
+            });
+
+            renderizarTabla(serviciosFiltrados);
+        }
+
+        // --- Funciones Auxiliares ---
+
+        /**
+         * Formatea una fecha de la API (YYYY-MM-DDThh:mm:ssZ) a un formato local (DD/MM/YYYY).
+         */
+        function formatearFecha(fechaString) {
+            if (!fechaString) return 'N/A';
+            // Crea un objeto Date. La 'T' y 'Z' son manejadas correctamente.
+            const fecha = new Date(fechaString);
+            // Usa métodos que no dependen de la zona horaria del servidor.
+            const dia = String(fecha.getUTCDate()).padStart(2, '0');
+            const mes = String(fecha.getUTCMonth() + 1).padStart(2, '0'); // Enero es 0
+            const anio = fecha.getUTCFullYear();
+            return `${dia}/${mes}/${anio}`;
+        }
+
+
+        // --- Event Listeners ---
+
+        document.addEventListener('DOMContentLoaded', () => {
+            cargarServiciosDesdeAPI();
+
+            // Añade listeners para los filtros
+            filtroNombre.addEventListener('input', aplicarFiltros);
+            filtroFecha.addEventListener('change', aplicarFiltros);
+            filtroEstado.addEventListener('change', aplicarFiltros);
+        });
+
+    </script>
+</body>
+</html>

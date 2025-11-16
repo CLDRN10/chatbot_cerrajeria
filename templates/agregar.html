@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Agregar Servicio</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+  <style>
+    :root{
+      --bg:#0B2147;
+      --card:#143b71cf;
+      --accent:#ffcc33;
+      --text-dark:#082a65;
+      --white:#ffffff;
+    }
+
+    html,body{
+      height:100%;
+      margin:0;
+      font-family:"Verdana", Geneva, Tahoma, sans-serif;
+      background:var(--bg);
+      color:#fff;
+      overflow:hidden;
+    }
+
+    .page-wrap{
+      height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:1rem;
+    }
+
+    .service-card{
+      width:100%;
+      max-width:430px;
+      background:var(--card);
+      border-radius:20px;
+      padding:1.25rem;
+      box-shadow:0 8px 30px rgba(0,0,0,0.45);
+      animation:slideIn .6s ease;
+      height:90vh;
+      display:flex;
+      flex-direction:column;
+      overflow-y:auto;
+    }
+
+    @keyframes slideIn{
+      from{opacity:0; transform:translateY(20px)}
+      to{opacity:1; transform:translateY(0)}
+    }
+
+    .service-card::-webkit-scrollbar{
+      width: 7px;
+    }
+
+    .service-card::-webkit-scrollbar-thumb{
+      background: var(--accent);
+      border-radius: 20px;
+    }
+
+    .back-btn {
+      background: var(--accent);
+      border: none;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      box-shadow: 0 6px 18px rgba(254, 209, 48, 0.45);
+      cursor: pointer;
+      margin-bottom: 0.6rem;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .back-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 24px rgba(254, 209, 48, 0.55);
+    }
+
+    .back-btn img {
+      width: 20px;
+      height: 20px;
+      object-fit: contain;
+    }
+
+    .titulo{margin-top:.5rem;margin-bottom:1rem}
+    .titulo h3{font-weight:800;color:var(--white);margin:0}
+
+    .register-card{
+      background:var(--white);
+      color:var(--text-dark);
+      border-radius:14px;
+      padding:1rem;
+      box-shadow:0 8px 24px rgba(0,0,0,0.08);
+    }
+
+    .form-control,
+    .select2-container--default .select2-selection--single {
+      height:42px !important;
+      border-radius:12px !important;
+      padding:6px 12px !important;
+      font-size:.95rem !important;
+      border:1px solid #dfe6f1 !important;
+      background:#fbfdff !important;
+      display:flex !important;
+      align-items:center !important;
+    }
+
+    .form-control:focus,
+    .select2-selection--single:focus{
+      box-shadow:0 0 0 3px rgba(255,204,51,0.45) !important;
+      border-color:var(--accent) !important;
+    }
+
+    label{font-weight:600;font-size:.95rem}
+
+    .valor-wrap { display:flex; gap:.5rem; align-items:center; }
+    .valor-wrap .currency { font-weight:700; font-size:1rem; color:var(--text-dark) }
+
+    .btn-service{
+      background:var(--accent);
+      color:var(--text-dark);
+      font-weight:700;
+      border-radius:12px;
+      padding:.65rem 1rem;
+      border:0;
+      width:100%;
+      box-shadow:0 8px 28px rgba(255,204,51,0.25);
+    }
+
+    .btn-service:hover{
+      transform:translateY(-3px);
+      opacity:.97;
+    }
+
+    .swal2-popup {
+      border-radius:20px !important;
+      background:#143b71 !important;
+      color:#fff !important;
+      box-shadow:0 0 25px rgba(254,209,48,0.4) !important;
+      width:360px !important;
+      padding:1.8rem !important;
+    }
+
+    .swal2-confirm{
+      background:#fed130 !important;
+      color:#082a65 !important;
+      border-radius:10px !important;
+      font-weight:700 !important;
+    }
+
+    .swal2-container.swal-centered {
+      align-items:center !important;
+      justify-content:center !important;
+    }
+
+    .select2-results__options::-webkit-scrollbar {
+      width: 3px !important;
+    }
+
+  </style>
+</head>
+<body>
+
+  <div class="page-wrap">
+    <div class="service-card" id="serviceCard">
+
+      <button class="back-btn" onclick="location.href='inicio.html'">
+        <img src="https://cdn-icons-png.flaticon.com/512/271/271220.png">
+      </button>
+
+      <div class="titulo">
+        <h3>¿Qué servicio <br/> deseas agregar hoy?</h3>
+      </div>
+
+      <div class="register-card">
+        <form id="serviceForm" onsubmit="event.preventDefault(); guardarServicio();">
+
+          <div class="mb-2">
+            <label for="Tipos">Tipo de servicio</label>
+            <select id="Tipos" class="form-select" required>
+              <option value="">Seleccionar</option>
+              <option value="vehiculos">Apertura de automóvil</option>
+              <option value="cajas_fuertes">Apertura de caja fuerte</option>
+              <option value="candandos">Apertura de candado</option>
+              <option value="vehiculos2">Apertura de motocicleta</option>
+              <option value="apertura">Apertura de puerta residencial</option>
+              <option value="clave2">Cambio de clave de automóvil</option>
+              <option value="clave1">Cambio de clave de motocicleta</option>
+              <option value="residencia">Cambio de clave residencial</option>
+              <option value="copia_llave">Duplicado de llave</option>
+              <option value="llaves">Elaboración de llaves</option>
+              <option value="alarmas">Instalación de alarma</option>
+              <option value="instalar_chapas">Instalación de chapa</option>
+              <option value="reparacion">Reparación general</option>
+            </select>
+          </div>
+
+          <div class="mb-2">
+            <label for="nombreCliente">Nombre del cliente</label>
+            <input type="text" id="nombreCliente" class="form-control" required>
+          </div>
+
+          <div class="mb-2">
+            <label for="direccion">Dirección</label>
+            <input type="text" id="direccion" class="form-control" required>
+          </div>
+
+          <div class="mb-2">
+            <label for="municipio">Municipio</label>
+            <select id="municipio" class="form-select" required>
+              <option value="">Seleccionar</option>
+              <option value="Bucaramanga">Bucaramanga</option>
+              <option value="Floridablanca">Floridablanca</option>
+              <option value="Piedecuesta">Piedecuesta</option>
+            </select>
+          </div>
+
+          <div class="row g-2">
+            <div class="col-7 mb-2">
+              <label for="fecha">Fecha</label>
+              <input type="text" id="fecha" class="form-control datepicker" required>
+            </div>
+           <div class="mb-2">
+  <label for="hora">Hora</label>
+  <input type="text" id="hora" class="form-control" placeholder="Seleccionar hora" required>
+</div>
+
+
+      <div class="mb-2">
+  <label for="valor">Valor del servicio</label>
+  <div class="valor-wrap">
+    <span class="currency">$</span>
+    <input type="text" id="valor" class="form-control" required>
+  </div>
+</div>
+
+
+          <div class="mb-2">
+            <label for="cerrajero">Cerrajero</label>
+            <select id="cerrajero" class="form-select" required>
+              <option value="">Seleccionar</option>
+              <option value="Jose">Jose Hernández</option>
+              <option value="Otro">Otro</option>
+            </select>
+          </div>
+
+          <div class="mb-2" id="otro-cerrajero-container" style="display:none">
+            <label for="otroCerrajero">Nombre del cerrajero</label>
+            <input type="text" id="otroCerrajero" class="form-control">
+          </div>
+
+          <div class="mb-2">
+            <label for="estadoServicio">Estado</label>
+            <select id="estadoServicio" class="form-select" required>
+              <option value="">Seleccionar estado</option>
+              <option value="Pendiente">Pendiente</option>
+              <option value="Finalizado">Finalizado</option>
+              <option value="Cancelado">Cancelado</option>
+            </select>
+          </div>
+
+          <button class="btn-service mt-3" type="submit">Guardar Servicio</button>
+
+        </form>
+      </div>
+
+    </div>
+  </div>
+  
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script>
+
+  <script>
+
+    (function(){
+
+      $('#Tipos, #municipio, #cerrajero, #estadoServicio').select2({
+        minimumResultsForSearch: Infinity,
+        width: '100%',
+        dropdownParent: $('.register-card')
+      });
+
+      flatpickr(".datepicker", {
+        locale: "es",
+        dateFormat: "d/m/Y",
+        disableMobile: true
+      });
+
+      flatpickr(".timepicker", {
+        locale: "es",
+        enableTime: true,
+        noCalendar: true,
+        dateFormat: "H:i",
+        time_24hr: true
+      });
+
+      $('#cerrajero').on('change', function(){
+        if($(this).val() === 'Otro'){
+          $('#otro-cerrajero-container').slideDown(150);
+          $('#otroCerrajero').attr('required', true);
+        } else {
+          $('#otro-cerrajero-container').slideUp(120);
+          $('#otroCerrajero').removeAttr('required').val('');
+        }
+      });
+
+      window.guardarServicio = function(){
+
+        const tipo = $('#Tipos').val();
+        const cliente = $('#nombreCliente').val().trim();
+        const direccion = $('#direccion').val().trim();
+        const municipio = $('#municipio').val();
+        const fecha = $('#fecha').val().trim();
+        const hora = $('#hora').val().trim();
+        const valor = $('#valor').val().trim();
+        const cerrajero = $('#cerrajero').val();
+        const otroCerrajero = $('#otroCerrajero').val().trim();
+        const estado = $('#estadoServicio').val();
+
+        if(!tipo || !cliente || !direccion || !municipio || !fecha || !hora || !valor || !cerrajero || !estado){
+          return Swal.fire({
+            icon:'warning',
+            title:'Campos incompletos',
+            text:'Debes completar todos los campos.',
+            customClass:{ popup:'swal-centered' }
+          });
+        }
+
+        if(cerrajero === 'Otro' && !otroCerrajero){
+          return Swal.fire({
+            icon:'warning',
+            title:'Falta nombre',
+            text:'Ingresa el nombre del cerrajero.',
+            customClass:{ popup:'swal-centered' }
+          });
+        }
+
+        Swal.fire({
+  icon: 'success',
+  title: 'Servicio guardado',
+  html: `
+    <p>El servicio fue registrado exitosamente.</p>
+    <div style="display:flex; flex-direction:column; gap:10px; margin-top:15px;">
+      <button id="nuevoServicioBtn" class="swal2-confirm swal2-styled" style="background:#fed130; color:#082a65; border-radius:10px; font-weight:700;">
+        Agregar otro servicio
+      </button>
+
+      <button id="verServiciosBtn" class="swal2-confirm swal2-styled" style="background:#fff; color:#082a65; border-radius:10px; font-weight:700; border:2px solid #fed130;">
+        Ver servicios
+      </button>
+    </div>
+  `,
+  showConfirmButton: false,
+  customClass: { popup: 'swal-centered' },
+  didRender: () => {
+
+    document.getElementById("nuevoServicioBtn").onclick = () => {
+      Swal.close();
+      document.getElementById("serviceForm").reset();
+      $('#Tipos, #municipio, #cerrajero, #estadoServicio').val('').trigger('change');
+      $('#otro-cerrajero-container').hide();
+    };
+
+    document.getElementById("verServiciosBtn").onclick = () => {
+      window.location.href = "servicios.html";
+    };
+
+  }
+});
+
+
+      }
+
+    })();
+
+const precioInput = document.getElementById("valor");
+
+precioInput.addEventListener("input", function () {
+  let soloNumeros = precioInput.value.replace(/\D/g, "");
+
+  if (soloNumeros === "") {
+    precioInput.value = "";
+    return;
+  }
+
+  precioInput.value = new Intl.NumberFormat("es-CO").format(soloNumeros);
+});
+
+flatpickr("#hora", {
+  enableTime: true,
+  noCalendar: true,
+  dateFormat: "h:i K",  
+  minuteIncrement: 5,    
+  time_24hr: false,  
+  disableMobile: true, 
+});
+</script>
+
+</body>
+</html>
