@@ -1,0 +1,7 @@
+# Ignorar la carpeta de plantillas HTML
+Templates/
+
+# Archivos de entorno de Python
+.venv/
+__pycache__/
+*.pyc

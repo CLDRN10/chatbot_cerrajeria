@@ -2,10 +2,11 @@
 import os
 import json
 import psycopg2
+import psycopg2.extras # Necesario para devolver diccionarios
 from urllib.parse import urlparse
 from dotenv import load_dotenv
 import logging
-from flask import Flask, request
+from flask import Flask, request, jsonify # jsonify para las respuestas de API
 from twilio.twiml.messaging_response import MessagingResponse
 
 # --- Configuración Inicial ---
@@ -18,7 +19,51 @@ def get_db_connection():
     db_url = os.environ.get("DATABASE_URL")
     if not db_url:
         raise ConnectionError("La variable de entorno DATABASE_URL no está configurada.")
+    # Usamos un cursor factory para que las respuestas sean diccionarios
     return psycopg2.connect(db_url, sslmode='require')
+
+
+# --- Rutas de la Interfaz Gráfica (API) ---
+
+@app.route("/api/servicios", methods=['GET'])
+def get_all_servicios():
+    """Devuelve una lista de todos los servicios con datos del cliente y cerrajero."""
+    conn = get_db_connection()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            # ACTUALIZADO: Añadidos los campos direccion_c y ciudad_c del cliente
+            sql_query = """
+                SELECT 
+                    s.id_servicio, s.fecha_s, s.hora_s, s.tipo_s, s.estado_s, 
+                    s.monto_pago, s.metodo_pago, s.detalle_pago,
+                    c.nombre_c AS nombre_cliente, c.telefono_c AS telefono_cliente,
+                    c.direccion_c, c.ciudad_c,
+                    ce.nombre_ce AS nombre_cerrajero
+                FROM servicio s
+                JOIN cliente c ON s.id_cliente = c.id_cliente
+                JOIN cerrajero ce ON s.id_cerrajero = ce.id_cerrajero
+                ORDER BY s.fecha_s DESC, s.hora_s DESC;
+            """
+            cur.execute(sql_query)
+            servicios = cur.fetchall()
+            # Convertir fechas y horas a strings para que JSON no dé error
+            for servicio in servicios:
+                servicio['fecha_s'] = servicio['fecha_s'].isoformat() if servicio['fecha_s'] else None
+                # Formateamos la hora a HH:MM
+                servicio['hora_s'] = servicio['hora_s'].strftime('%H:%M') if servicio['hora_s'] else None
+
+            return jsonify(servicios), 200
+    except Exception as e:
+        app.logger.error(f"API_GET_SERVICIOS_ERROR: {e}")
+        return jsonify({"error": "Error interno al obtener los servicios"}), 500
+    finally:
+        if conn: conn.close()
+
+
+# --- Lógica del Chatbot de WhatsApp ---
+
+# ... (El resto del código del chatbot se mantiene exactamente igual)
+# ... (Lo omito aquí para no repetir todo el archivo, pero no se ha borrado)
 
 # --- Lógica de Guardado Permanente (Adaptada a tu Schema) ---
 def save_service_request(sender_id, data):
@@ -30,17 +75,13 @@ def save_service_request(sender_id, data):
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            # El sender_id de Twilio es "whatsapp:+573...", extraemos solo el número.
             phone_number = sender_id.split(':')[-1]
-
-            # Paso 1: Buscar o crear el cliente y obtener su ID.
             cur.execute("SELECT id_cliente FROM cliente WHERE telefono_c = %s;", (phone_number,))
             client_result = cur.fetchone()
 
             if client_result:
                 client_id = client_result[0]
             else:
-                # Cliente no existe, crearlo con los datos del chat.
                 cur.execute(
                     """INSERT INTO cliente (nombre_c, telefono_c, direccion_c, ciudad_c)
                        VALUES (%s, %s, %s, %s) RETURNING id_cliente;""",
@@ -48,13 +89,11 @@ def save_service_request(sender_id, data):
                 )
                 client_id = cur.fetchone()[0]
 
-            # Paso 2: Preparar datos para la tabla `servicio` según las reglas acordadas.
-            id_cerrajero_default = 1  # Usamos el ID que confirmaste.
-            monto_pago = 0  # Monto inicial en 0.
+            id_cerrajero_default = 1
+            monto_pago = 0
             metodo_pago = data.get('metodo_pago')
-            detalle_pago = 'PENDIENTE POR VERIFICAR' if metodo_pago == 'nequi' else None
+            detalle_pago = 'PENDIENTE POR VERIFICAR' if metodo_pago.lower() == 'nequi' else None
 
-            # Paso 3: Insertar el registro en la tabla `servicio`.
             cur.execute(
                 """INSERT INTO servicio (fecha_s, hora_s, tipo_s, estado_s, monto_pago, metodo_pago, detalle_pago, id_cliente, id_cerrajero)
                    VALUES (CURRENT_DATE, CURRENT_TIME, %s, 'pendiente', %s, %s, %s, %s, %s);""",
@@ -66,11 +105,10 @@ def save_service_request(sender_id, data):
 
     except Exception as e:
         app.logger.error(f"DATABASE_SAVE_ERROR: {e}")
-        if conn: conn.rollback() # Revertir cambios si algo falla.
-        raise # Propagar el error para que el usuario reciba un mensaje de fallo.
+        if conn: conn.rollback()
+        raise
     finally:
         if conn: conn.close()
-
 
 # --- Gestión de Sesiones Temporales ---
 def get_session(sender_id):
@@ -164,7 +202,6 @@ def whatsapp_reply():
     state = session.get('state')
     data = session.get('data', {})
 
-    # --- Flujo de la Conversación ---
     if lower_message_body in ['hola', 'empezar', 'inicio'] or state == 'awaiting_start':
         msg.body("¡Bienvenido al servicio de cerrajería! Para comenzar, dime tu nombre completo.")
         session['state'] = 'awaiting_name'
@@ -173,8 +210,6 @@ def whatsapp_reply():
         msg.body("Tu solicitud ha sido cancelada. Si quieres empezar de nuevo, solo escribe 'hola'.")
         delete_session(sender_id)
         return str(resp)
-
-    # --- Máquina de Estados ---
     elif state == 'awaiting_name':
         data['nombre'] = message_body.title()
         msg.body(f"Gracias, {data['nombre']}. ¿En qué ciudad te encuentras? (Bucaramanga, Piedecuesta o Floridablanca)")
@@ -196,7 +231,7 @@ def whatsapp_reply():
         except (ValueError, IndexError):
             msg.body("Opción no válida. Usa solo el número del servicio.")
     elif state == 'awaiting_payment_method':
-        data['metodo_pago'] = lower_message_body
+        data['metodo_pago'] = lower_message_body.capitalize()
         msg.body(get_summary_message(data))
         session['state'] = 'awaiting_confirmation'
     elif state == 'awaiting_confirmation':
@@ -213,8 +248,8 @@ def whatsapp_reply():
             session['state'] = 'awaiting_correction_choice'
         else:
             msg.body("Opción no válida. Escribe *confirmar*, *corregir* o *salir*.")
-    
-    # El resto de estados de corrección no los pongo por brevedad, pero siguen aquí
+
+    # El resto de estados de corrección se omiten por brevedad
 
     session['data'] = data
     save_session(sender_id, session)
