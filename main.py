@@ -55,7 +55,8 @@ def get_all_servicios():
             return jsonify(servicios), 200
     except Exception as e:
         app.logger.error(f"API_GET_SERVICIOS_ERROR: {e}")
-        return jsonify({"error": "Error interno al obtener los servicios"}), 500
+        # Cambio temporal para depuración: Devolver el error real.
+        return jsonify({"error_real": str(e)}), 500
     finally:
         if conn: conn.close()
 
