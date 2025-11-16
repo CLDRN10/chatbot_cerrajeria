@@ -1,263 +1,430 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Servicios de Cerrajería</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            line-height: 1.6;
-            background-color: #f4f4f9;
-            color: #333;
-            margin: 0;
-            padding: 20px;
-        }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background: #fff;
-            padding: 25px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-        }
-        h1 {
-            color: #2c3e50;
-            text-align: center;
-            border-bottom: 2px solid #3498db;
-            padding-bottom: 10px;
-            margin-bottom: 30px;
-        }
-        #error-message {
-            background-color: #e74c3c;
-            color: white;
-            padding: 15px;
-            border-radius: 5px;
-            text-align: center;
-            font-weight: bold;
-            display: none; /* Oculto por defecto */
-            margin-bottom: 20px;
-        }
-        .filters {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-        .filters input, .filters select {
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-            font-size: 16px;
-        }
-        .table-container {
-            overflow-x: auto;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-        th, td {
-            padding: 12px 15px;
-            border: 1px solid #ddd;
-            text-align: left;
-        }
-        th {
-            background-color: #3498db;
-            color: white;
-            font-weight: bold;
-        }
-        tr:nth-child(even) {
-            background-color: #f2f2f2;
-        }
-        tr:hover {
-            background-color: #ecf0f1;
-        }
-        @media (max-width: 768px) {
-            .filters {
-                flex-direction: column;
-                align-items: stretch;
-            }
-            th, td {
-                padding: 10px 8px;
-            }
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ver Servicios - Cerrajería 24 Horas</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+  <style>
+    :root {
+      --bg: #0B2147;
+      --card: #143b71cf;
+      --accent: #ffcc33;
+      --text-dark: #082a65;
+      --white: #ffffff;
+      --cancelado: #ff4b4b;
+      --finalizado: #5ee072;
+      --pendiente: #ffcc33;
+    }
+
+    body {
+      background-color: var(--bg);
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding-top: 40px;
+      margin: 0;
+      font-family: Verdana, Geneva, Tahoma, sans-serif;
+      overflow: hidden;
+    }
+
+    .service-card {
+      background-color: var(--card);
+      border-radius: 20px;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.35);
+      width: 100%;
+      max-width: 430px;
+      height: 90vh;
+      padding: 1.8rem;
+      overflow-y: auto;
+      position: relative;
+      animation: fadeIn 0.6s ease;
+    }
+
+    .service-card::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .service-card::-webkit-scrollbar-thumb {
+      background-color: var(--accent);
+      border-radius: 20px;
+      border: 2px solid var(--card);
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .back-btn {
+      background: var(--accent);
+      position: absolute;
+      top: 15px;
+      left: 15px;
+      border: none;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 6px 18px rgba(254, 209, 48, 0.45);
+      cursor: pointer;
+      transition: 0.2s;
+    }
+
+    .back-btn:hover {
+      transform: translateY(-2px);
+    }
+
+    .back-btn img {
+      width: 20px;
+      height: 20px;
+    }
+
+    .texto h3 {
+      font-weight: 900;
+      font-size: 1.45rem;
+      text-align: center;
+      color: #fff;
+      margin-top: 70px;
+      margin-bottom: 20px;
+    }
+
+    .btn-top {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 15px;
+      gap: 10px;
+    }
+
+    .btn-action {
+      flex: 1;
+      background-color: var(--accent);
+      border: none;
+      color: var(--text-dark);
+      font-weight: 700;
+      border-radius: 12px;
+      padding: 10px;
+      transition: 0.2s;
+    }
+
+    .btn-action:hover {
+      background-color: #e5b800;
+      transform: translateY(-2px);
+    }
+
+    .service-item {
+      background-color: #dfeaef;
+      color: var(--text-dark);
+      border-radius: 15px;
+      padding: 15px;
+      margin-bottom: 15px;
+      box-shadow: 0 0 15px rgba(255, 204, 51, 0.25);
+      cursor: pointer;
+      transition: 0.2s;
+    }
+
+    .service-item.selected {
+      border: 3px solid var(--accent);
+    }
+
+    .estado-chip {
+      padding: 4px 10px;
+      border-radius: 10px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      border: none;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+
+    .estado-pendiente {
+      background: var(--pendiente);
+      color: var(--text-dark);
+    }
+
+    .estado-finalizado {
+      background: var(--finalizado);
+      color: var(--text-dark);
+    }
+
+    .estado-cancelado {
+      background: var(--cancelado);
+      color: #fff;
+    }
+
+    .no-data {
+      text-align: center;
+      margin-top: 20px;
+      color: #ccc;
+      font-size: 0.9rem;
+    }
+  </style>
 </head>
+
 <body>
 
-    <div class="container">
-        <h1>Panel de Control de Servicios</h1>
+  <div class="service-card">
 
-        <div id="error-message"></div>
+    <button class="back-btn" onclick="location.href='inicio.html'">
+      <img src="https://cdn-icons-png.flaticon.com/512/271/271220.png">
+    </button>
 
-        <div class="filters">
-            <input type="text" id="filtro-nombre" placeholder="Filtrar por nombre de cliente...">
-            <input type="date" id="filtro-fecha">
-            <select id="filtro-estado">
-                <option value="">Todos los estados</option>
-                <option value="pendiente">Pendiente</option>
-                <option value="en_proceso">En Proceso</option>
-                <option value="completado">Completado</option>
-                <option value="cancelado">Cancelado</option>
-            </select>
-        </div>
-
-        <div class="table-container">
-            <table id="servicios-tabla">
-                <thead>
-                    <tr>
-                        <th>ID Servicio</th>
-                        <th>Cliente</th>
-                        <th>Dirección</th>
-                        <th>Ciudad</th>
-                        <th>Fecha</th>
-                        <th>Hora</th>
-                        <th>Tipo</th>
-                        <th>Estado</th>
-                        <th>Cerrajero Asignado</th>
-                    </tr>
-                </thead>
-                <tbody id="servicios-tbody">
-                    <!-- Las filas se insertarán aquí dinámicamente -->
-                </tbody>
-            </table>
-        </div>
+    <div class="texto">
+      <h3><b>Historial de servicios</b></h3>
     </div>
 
-    <script>
-        // --- Constantes y Configuración ---
-        const API_URL = '/api/servicios';
-        const tbody = document.getElementById('servicios-tbody');
-        const errorMessageDiv = document.getElementById('error-message');
-        const filtroNombre = document.getElementById('filtro-nombre');
-        const filtroFecha = document.getElementById('filtro-fecha');
-        const filtroEstado = document.getElementById('filtro-estado');
-        let todosLosServicios = []; // Caché para los datos de la API
+    <div class="btn-top">
+      <button class="btn-action" onclick="editarServicio()">Editar</button>
+      <button class="btn-action" onclick="eliminarServicio()">Eliminar</button>
+    </div>
 
-        // --- Funciones Principales ---
+    <div id="listaServicios"></div>
+    <div id="noServicios" class="no-data">No hay servicios registrados aún.</div>
 
-        /**
-         * Carga los datos de los servicios desde la API.
-         */
-        async function cargarServiciosDesdeAPI() {
-            try {
-                // La URL es relativa, por lo que funcionará en cualquier dominio.
-                const response = await fetch(API_URL);
+  </div>
 
-                if (!response.ok) {
-                    // Intenta leer el error específico del cuerpo de la respuesta.
-                    const errorData = await response.json().catch(() => null);
-                    const errorMsg = errorData?.error_real || `Error HTTP: ${response.status}`;
-                    throw new Error(errorMsg);
-                }
+  <script>
+    let servicioSeleccionado = null;
 
-                const data = await response.json();
-                
-                if (data.error) {
-                    throw new Error(data.error);
-                }
-                
-                todosLosServicios = data; // Almacena en caché
-                renderizarTabla(todosLosServicios); // Renderiza la tabla inicial
-                errorMessageDiv.style.display = 'none'; // Oculta errores previos
+    document.addEventListener("DOMContentLoaded", () => {
+      cargarServiciosDemo();
+      cargarServicios();
+    });
 
-            } catch (error) {
-                console.error("Error al cargar servicios desde la API:", error);
-                mostrarError(`Error al cargar servicios: ${error.message}`);
-            }
+    function cargarServiciosDemo() {
+      if (!localStorage.getItem("servicios")) {
+        const demo = [
+          {
+            id: 1,
+            tipo: "Instalación de chapas",
+            cliente: "Juan Pérez",
+            direccion: "Calle 12 #34-56",
+            municipio: "Bucaramanga",
+            fecha: "12/02/2025",
+            hora: "14:30",
+            valorFormatted: "55.000",
+            cerrajero: "Jose",
+            estado: "Estado"
+          }
+        ];
+        localStorage.setItem("servicios", JSON.stringify(demo));
+      }
+    }
+
+    function cargarServicios() {
+      const lista = JSON.parse(localStorage.getItem("servicios")) || [];
+      mostrarServicios(lista);
+    }
+
+    function mostrarServicios(lista) {
+      const contenedor = document.getElementById("listaServicios");
+      const vacio = document.getElementById("noServicios");
+      contenedor.innerHTML = "";
+
+      if (lista.length === 0) {
+        vacio.style.display = "block";
+        return;
+      }
+
+      vacio.style.display = "none";
+
+      lista.forEach(serv => {
+
+        let estadoClase = "estado-pendiente";
+        if (serv.estado === "Finalizado") estadoClase = "estado-finalizado";
+        if (serv.estado === "Cancelado") estadoClase = "estado-cancelado";
+
+        const div = document.createElement("div");
+        div.className = "service-item";
+
+        div.innerHTML = `
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h5><b>${serv.tipo}</b></h5>
+            <button class="estado-chip ${estadoClase}"
+              onclick="cambiarEstado(${serv.id}); event.stopPropagation();">
+              ${serv.estado || "Estado"}
+            </button>
+          </div>
+
+          <p><b>Cliente:</b> ${serv.cliente}</p>
+          <p><b>Dirección:</b> ${serv.direccion}</p>
+          <p><b>Municipio:</b> ${serv.municipio}</p>
+
+          <div style="display:flex; gap:20px;">
+            <p><b>Fecha:</b> ${serv.fecha}</p>
+            <p><b>Hora:</b> ${serv.hora}</p>
+          </div>
+
+          <p><b>Valor:</b> $${serv.valorFormatted}</p>
+          <p><b>Cerrajero:</b> ${serv.cerrajero}</p>
+        `;
+
+        div.onclick = () => seleccionarServicio(div, serv.id);
+        contenedor.appendChild(div);
+      });
+    }
+
+    function seleccionarServicio(el, id) {
+      document.querySelectorAll(".service-item").forEach(i => i.classList.remove("selected"));
+      el.classList.add("selected");
+      servicioSeleccionado = id;
+    }
+
+    function cambiarEstado(id) {
+
+      Swal.fire({
+        title: "Cambiar estado",
+        background: "rgba(20, 59, 113, 0.95)",
+        color: "#fff",
+        width: "430px",
+        padding: "1.5rem",
+        showConfirmButton: false,
+        showCancelButton: true,
+        cancelButtonText: "Cerrar",
+        cancelButtonColor: "#ffcc33",
+        didOpen: () => {
+          const box = document.querySelector(".swal2-popup");
+          box.style.borderRadius = "20px";
+          box.style.width = "430px";
+          box.style.boxShadow = "0 0 28px rgba(255, 204, 51, 0.45)";
+        },
+        html: `
+          <div style="display:flex; flex-direction:column; gap:12px; width:100%;">
+
+            <button onclick="guardarNuevoEstado(${id}, 'Pendiente')"
+              style="background:#fff7d1; color:#8a6a00; border:2px solid #ffcc33;
+              font-weight:700; padding:10px; border-radius:12px; transition:.2s;"
+              onmouseover="this.style.filter='brightness(1.1)'"
+              onmouseout="this.style.filter='brightness(1)'">
+              Pendiente
+            </button>
+
+            <button onclick="guardarNuevoEstado(${id}, 'Finalizado')"
+              style="background:#e8ffe8; color:#0d6b2e; border:2px solid #5ee072;
+              font-weight:700; padding:10px; border-radius:12px; transition:.2s;"
+              onmouseover="this.style.filter='brightness(1.1)'"
+              onmouseout="this.style.filter='brightness(1)'">
+              Finalizado
+            </button>
+
+            <button onclick="guardarNuevoEstado(${id}, 'Cancelado')"
+              style="background:#ffe8e8; color:#a80000; border:2px solid #ff4b4b;
+              font-weight:700; padding:10px; border-radius:12px; transition:.2s;"
+              onmouseover="this.style.filter='brightness(1.1)'"
+              onmouseout="this.style.filter='brightness(1)'">
+              Cancelado
+            </button>
+
+          </div>
+        `,
+      });
+    }
+
+    function swalAjustado(config) {
+      Swal.fire({
+        ...config,
+        width: "430px",
+        didOpen: () => {
+          const box = document.querySelector(".swal2-popup");
+          box.style.borderRadius = "20px";
+          box.style.width = "430px";
+          box.style.boxShadow = "0 0 28px rgba(255, 204, 51, 0.45)";
         }
+      });
+    }
 
-        /**
-         * Muestra un mensaje de error en la interfaz.
-         */
-        function mostrarError(mensaje) {
-            errorMessageDiv.textContent = mensaje;
-            errorMessageDiv.style.display = 'block';
-            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color: #7f8c8d;">No se pudieron cargar los datos.</td></tr>';
-        }
+    function guardarNuevoEstado(id, estado) {
+      let lista = JSON.parse(localStorage.getItem("servicios")) || [];
 
-        /**
-         * Renderiza un array de servicios en la tabla HTML.
-         */
-        function renderizarTabla(servicios) {
-            tbody.innerHTML = ''; // Limpia la tabla antes de renderizar
+      lista = lista.map(s => {
+        if (s.id === id) s.estado = estado;
+        return s;
+      });
 
-            if (!servicios || servicios.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color: #7f8c8d;">No hay servicios que mostrar.</td></tr>';
-                return;
-            }
+      localStorage.setItem("servicios", JSON.stringify(lista));
+      Swal.close();
+      cargarServicios();
 
-            servicios.forEach(servicio => {
-                const fila = `
-                    <tr>
-                        <td>${servicio.id_servicio}</td>
-                        <td>${servicio.nombre_cliente}</td>
-                        <td>${servicio.direccion_cliente}</td>
-                        <td>${servicio.ciudad_cliente}</td>
-                        <td>${formatearFecha(servicio.fecha)}</td>
-                        <td>${servicio.hora}</td>
-                        <td>${servicio.tipo}</td>
-                        <td>${servicio.estado}</td>
-                        <td>${servicio.nombre_cerrajero}</td>
-                    </tr>
-                `;
-                tbody.innerHTML += fila;
-            });
-        }
+      swalAjustado({
+        icon: "success",
+        title: "Estado actualizado",
+        text: "Nuevo estado: " + estado,
+        background: "#143b71",
+        color: "#fff",
+        confirmButtonColor: "#fed130",
+        timer: 1300
+      });
+    }
 
-        /**
-         * Aplica los filtros actuales a la lista de servicios en caché.
-         */
-        function aplicarFiltros() {
-            const nombre = filtroNombre.value.toLowerCase();
-            const fecha = filtroFecha.value;
-            const estado = filtroEstado.value;
-
-            const serviciosFiltrados = todosLosServicios.filter(s => {
-                const nombreMatch = s.nombre_cliente.toLowerCase().includes(nombre);
-                // Asegura que la fecha de la API (que puede tener formato UTC) se compara correctamente
-                const fechaMatch = !fecha || s.fecha.startsWith(fecha);
-                const estadoMatch = !estado || s.estado === estado;
-
-                return nombreMatch && fechaMatch && estadoMatch;
-            });
-
-            renderizarTabla(serviciosFiltrados);
-        }
-
-        // --- Funciones Auxiliares ---
-
-        /**
-         * Formatea una fecha de la API (YYYY-MM-DDThh:mm:ssZ) a un formato local (DD/MM/YYYY).
-         */
-        function formatearFecha(fechaString) {
-            if (!fechaString) return 'N/A';
-            // Crea un objeto Date. La 'T' y 'Z' son manejadas correctamente.
-            const fecha = new Date(fechaString);
-            // Usa métodos que no dependen de la zona horaria del servidor.
-            const dia = String(fecha.getUTCDate()).padStart(2, '0');
-            const mes = String(fecha.getUTCMonth() + 1).padStart(2, '0'); // Enero es 0
-            const anio = fecha.getUTCFullYear();
-            return `${dia}/${mes}/${anio}`;
-        }
-
-
-        // --- Event Listeners ---
-
-        document.addEventListener('DOMContentLoaded', () => {
-            cargarServiciosDesdeAPI();
-
-            // Añade listeners para los filtros
-            filtroNombre.addEventListener('input', aplicarFiltros);
-            filtroFecha.addEventListener('change', aplicarFiltros);
-            filtroEstado.addEventListener('change', aplicarFiltros);
+    function editarServicio() {
+      if (!servicioSeleccionado) {
+        return swalAjustado({
+          icon: "info",
+          title: "Selecciona un servicio",
+          background: "#143b71",
+          color: "#fff",
+          confirmButtonColor: "#fed130",
         });
+      }
 
-    </script>
+      localStorage.setItem("servicioEditar", servicioSeleccionado);
+      window.location.href = "agregar.html";
+    }
+
+    function eliminarServicio() {
+      if (!servicioSeleccionado) {
+        return swalAjustado({
+          icon: "info",
+          title: "Selecciona un servicio",
+          background: "#143b71",
+          color: "#fff",
+          confirmButtonColor: "#fed130",
+        });
+      }
+
+      Swal.fire({
+        title: "¿Eliminar servicio?",
+        text: "Esta acción no se puede deshacer.",
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonColor: "#e5b800",
+        cancelButtonColor: "#143b71",
+        confirmButtonText: "Sí, eliminar",
+        cancelButtonText: "Cancelar",
+        background: "#143b71",
+        color: "#fff",
+        width: "430px",
+        didOpen: () => {
+          const box = document.querySelector(".swal2-popup");
+          box.style.borderRadius = "20px";
+          box.style.width = "430px";
+          box.style.boxShadow = "0 0 28px rgba(255, 204, 51, 0.45)";
+        }
+      }).then(result => {
+        if (result.isConfirmed) {
+          let lista = JSON.parse(localStorage.getItem("servicios")) || [];
+          lista = lista.filter(s => s.id !== servicioSeleccionado);
+          localStorage.setItem("servicios", JSON.stringify(lista));
+          servicioSeleccionado = null;
+          cargarServicios();
+
+          swalAjustado({
+            icon: "success",
+            title: "Eliminado",
+            background: "#143b71",
+            color: "#fff",
+            confirmButtonColor: "#fed130",
+          });
+        }
+      });
+    }
+  </script>
+
 </body>
 </html>
