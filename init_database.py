@@ -38,7 +38,7 @@ CREATE TABLE cliente (
 );
 """)
 
-# 3. Tabla de Servicios (CORREGIDA - SIN detalle_pago)
+# 3. Tabla de Servicios (CORREGIDA)
 cur.execute("""
 DROP TABLE IF EXISTS servicio CASCADE;
 CREATE TABLE servicio (
@@ -55,7 +55,7 @@ CREATE TABLE servicio (
     CONSTRAINT fk_cerrajero FOREIGN KEY (id_cerrajero) REFERENCES cerrajero (id_cerrajero),
     CONSTRAINT ck1_servicio CHECK (estado_s IN ('pendiente', 'en proceso', 'finalizado', 'cancelado')),
     CONSTRAINT ck2_servicio CHECK (monto_pago >= 0),
-    CONSTRAINT ck3_servicio CHECK (metodo_pago IN ('efectivo', 'nequi'))
+    CONSTRAINT ck3_servicio CHECK (metodo_pago IN ('efectivo', 'nequi', 'Efectivo', 'Nequi'))
 );
 """)
 
@@ -79,7 +79,7 @@ cur.execute("INSERT INTO cerrajero (nombre_ce, telefono_ce) VALUES (%s, %s);", (
 print("Base de datos inicializada correctamente.")
 print("- Se eliminaron las tablas existentes.")
 print("- Se crearon las tablas: cerrajero, cliente, servicio, whatsapp_sessions.")
-print("- Se insertó un cerrajero por defecto.")
+print("- Se insertó un cerrajero por defecto y se corrigió la restricción de pago.")
 
 # --- Cierre de Conexión ---
 conn.commit()

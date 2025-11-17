@@ -271,7 +271,7 @@ def delete_service(service_id):
     finally:
         if conn: conn.close()
 
-# --- Lógica del Chatbot de WhatsApp ---
+# --- Lógica del Chatbot de WhatsApp (Versión Definitiva)---
 AVAILABLE_SERVICES = [
     "Apertura de automóvil", "Apertura de caja fuerte", "Apertura de candado", "Apertura de motocicleta",
     "Apertura de puerta residencial", "Cambio de clave de automóvil", "Cambio de clave de motocicleta",
@@ -364,153 +364,147 @@ def whatsapp_reply():
     sender_id = request.values.get('From', '')
     message_body = request.values.get('Body', '').strip()
     message_body_lower = message_body.lower()
-    message_sid = request.values.get('MessageSid')
     resp = MessagingResponse()
     msg = resp.message()
 
     session = get_session(sender_id)
 
-    if not session or message_body_lower in ['hola', 'empezar', 'inicio']:
-        session = {'state': 'awaiting_name', 'data': {}, 'processed_sids': []}
-        msg.body("¡Bienvenido al servicio de cerrajería! Para comenzar, dime tu nombre completo.")
+    if not session or message_body_lower in ['hola', 'inicio', 'empezar']:
+        session = {'state': 'AWAITING_NAME', 'data': {}}
+        msg.body("¡Bienvenido al servicio de cerrajería! Para comenzar, por favor, dime tu nombre completo.")
         save_session(sender_id, session)
         return str(resp)
     
-    if message_sid and message_sid in session.get('processed_sids', []):
-        return str(resp) 
-    if message_sid:
-        session.setdefault('processed_sids', []).append(message_sid)
-        session['processed_sids'] = session['processed_sids'][-10:]
-
-    state = session.get('state')
-    data = session.get('data', {})
-
     if message_body_lower == 'salir':
         delete_session(sender_id)
         msg.body("Tu solicitud ha sido cancelada. Si quieres empezar de nuevo, solo escribe 'hola'.")
         return str(resp)
 
-    # --- FLUJO PRINCIPAL ---
-    if state == 'awaiting_name':
-        data['nombre'] = message_body.title()
-        session['state'] = 'awaiting_city'
-        msg.body(f"Gracias, {data['nombre']}. ¿En qué ciudad te encuentras? (Bucaramanga, Piedecuesta o Floridablanca)")
+    state = session.get('state', 'AWAITING_NAME')
+    data = session.get('data', {})
 
-    elif state == 'awaiting_city':
+    # --- Máquina de Estados Principal ---
+    if state == 'AWAITING_NAME':
+        data['nombre'] = message_body.title()
+        session['state'] = 'AWAITING_CITY'
+        msg.body(f"Gracias, {data['nombre']}. ¿En qué ciudad te encuentras? (Bucaramanga, Piedecuesta o Floridablanca)")
+    
+    elif state == 'AWAITING_CITY':
         if message_body_lower not in ['bucaramanga', 'piedecuesta', 'floridablanca']:
-             msg.body("Ciudad no válida. Por favor, elige entre *Bucaramanga*, *Piedecuesta* o *Floridablanca*.")
+            msg.body("Ciudad no válida. Por favor, elige entre *Bucaramanga*, *Piedecuesta* o *Floridablanca*.")
         else:
             data['ciudad'] = message_body.capitalize()
-            session['state'] = 'awaiting_address'
+            session['state'] = 'AWAITING_ADDRESS'
             msg.body("Perfecto. Indícame la dirección completa (barrio, calle, número).")
-    
-    elif state == 'awaiting_address':
+
+    elif state == 'AWAITING_ADDRESS':
         data['direccion'] = message_body
-        session['state'] = 'awaiting_details'
+        session['state'] = 'AWAITING_SERVICE_TYPE'
         msg.body(get_service_list_message())
 
-    elif state == 'awaiting_details':
+    elif state == 'AWAITING_SERVICE_TYPE':
         try:
             choice = int(message_body)
             if 1 <= choice <= len(AVAILABLE_SERVICES):
                 data['detalle_servicio'] = AVAILABLE_SERVICES[choice - 1]
-                session['state'] = 'awaiting_payment_method'
+                session['state'] = 'AWAITING_PAYMENT_METHOD'
                 msg.body("¿Cómo prefieres pagar? (*Efectivo* o *Nequi*)")
-            else:
-                 msg.body("Opción no válida. Por favor, responde solo con el *número* del servicio que necesitas.")
-        except (ValueError, IndexError):
-            msg.body("Opción no válida. Usa solo el número del servicio.")
-
-    elif state == 'awaiting_payment_method':
-        if message_body_lower not in ['efectivo', 'nequi']:
-            msg.body("Método de pago no válido. Por favor, elige entre *Efectivo* o *Nequi*.")
-        else:
-            data['metodo_pago'] = message_body.capitalize()
-            session['state'] = 'awaiting_confirmation'
-            msg.body(get_summary_message(data))
-
-    # --- FLUJO DE CONFIRMACIÓN Y CORRECCIÓN ---
-    elif state == 'awaiting_confirmation':
-        if message_body_lower == 'confirmar':
-            try:
-                save_service_request(sender_id, data)
-                msg.body("¡Servicio confirmado! Tu solicitud ha sido guardada. Un cerrajero se pondrá en contacto contigo.")
-                delete_session(sender_id)
-                return str(resp)
-            except Exception as e:
-                app.logger.error(f"SAVE_REQUEST_FAILED: {e}")
-                msg.body("Hubo un error al guardar tu solicitud. Por favor, inténtalo de nuevo.")
-        elif message_body_lower == 'corregir':
-            session['state'] = 'awaiting_correction_choice'
-            msg.body("¿Qué dato deseas corregir? Responde con una sola palabra: *nombre*, *ciudad*, *direccion*, *servicio* o *pago*.")
-        else:
-            msg.body("Opción no válida. Escribe *confirmar*, *corregir* o *salir*.")
-
-    elif state == 'awaiting_correction_choice':
-        field_to_correct = message_body_lower
-        if field_to_correct == 'nombre':
-            session['state'] = 'correcting_name'
-            msg.body("Ok, dime el nombre correcto.")
-        elif field_to_correct == 'ciudad':
-            session['state'] = 'correcting_city'
-            msg.body("Ok, ¿cuál es la ciudad correcta? (Bucaramanga, Piedecuesta o Floridablanca)")
-        elif field_to_correct == 'direccion':
-            session['state'] = 'correcting_address'
-            msg.body("Ok, dime la dirección correcta.")
-        elif field_to_correct == 'servicio':
-            session['state'] = 'correcting_details'
-            msg.body(get_service_list_message())
-        elif field_to_correct == 'pago':
-            session['state'] = 'correcting_payment'
-            msg.body("Ok, ¿cuál es el método de pago correcto? (Efectivo o Nequi)")
-        else:
-            msg.body("No entendí. Por favor, elige una de estas opciones: *nombre*, *ciudad*, *direccion*, *servicio*, *pago*.")
-    
-    # --- ESTADOS DE CORRECCIÓN INDIVIDUALES ---
-    elif state == 'correcting_name':
-        data['nombre'] = message_body.title()
-        session['state'] = 'awaiting_confirmation'
-        msg.body(f"Dato actualizado.\n\n{get_summary_message(data)}")
-    elif state == 'correcting_city':
-        if message_body_lower not in ['bucaramanga', 'piedecuesta', 'floridablanca']:
-             msg.body("Ciudad no válida. Por favor, elige entre *Bucaramanga*, *Piedecuesta* o *Floridablanca*.")
-        else:
-            data['ciudad'] = message_body.capitalize()
-            session['state'] = 'awaiting_confirmation'
-            msg.body(f"Dato actualizado.\n\n{get_summary_message(data)}")
-    elif state == 'correcting_address':
-        data['direccion'] = message_body
-        session['state'] = 'awaiting_confirmation'
-        msg.body(f"Dato actualizado.\n\n{get_summary_message(data)}")
-    elif state == 'correcting_details':
-        try:
-            choice = int(message_body)
-            if 1 <= choice <= len(AVAILABLE_SERVICES):
-                data['detalle_servicio'] = AVAILABLE_SERVICES[choice - 1]
-                session['state'] = 'awaiting_confirmation'
-                msg.body(f"Dato actualizado.\n\n{get_summary_message(data)}")
             else:
                 msg.body("Opción no válida. Por favor, responde solo con el *número* del servicio que necesitas.")
         except (ValueError, IndexError):
-            msg.body("Opción no válida. Por favor, responde solo con el número del servicio.")
-    elif state == 'correcting_payment':
+            msg.body("Respuesta no válida. Por favor, usa solo el *número* del servicio de la lista.")
+
+    elif state == 'AWAITING_PAYMENT_METHOD':
         if message_body_lower not in ['efectivo', 'nequi']:
             msg.body("Método de pago no válido. Por favor, elige entre *Efectivo* o *Nequi*.")
         else:
             data['metodo_pago'] = message_body.capitalize()
-            session['state'] = 'awaiting_confirmation'
-            msg.body(f"Dato actualizado.\n\n{get_summary_message(data)}")
+            session['state'] = 'CONFIRMATION'
+            msg.body(get_summary_message(data))
 
+    # --- Flujo de Confirmación y Corrección ---
+    elif state == 'CONFIRMATION':
+        if message_body_lower == 'confirmar':
+            try:
+                save_service_request(sender_id, data)
+                msg.body("¡Servicio confirmado! Tu solicitud ha sido guardada. Pronto un cerrajero se pondrá en contacto contigo.")
+                delete_session(sender_id)
+                return str(resp) 
+            except Exception as e:
+                app.logger.error(f"SAVE_REQUEST_FAILED: {e}")
+                msg.body("Lo siento, hubo un error técnico al guardar tu solicitud. Por favor, intenta de nuevo escribiendo *confirmar*.")
+        elif message_body_lower == 'corregir':
+            session['state'] = 'AWAITING_CORRECTION_FIELD'
+            msg.body("¿Qué dato deseas corregir? Responde con una sola palabra: *nombre*, *ciudad*, *direccion*, *servicio* o *pago*.")
+        else:
+            msg.body("Opción no válida. Por favor, escribe *confirmar* para finalizar, *corregir* para cambiar un dato, o *salir* para cancelar.")
+
+    elif state == 'AWAITING_CORRECTION_FIELD':
+        field = message_body_lower
+        if field == 'nombre':
+            session['state'] = 'CORRECTING_NAME'
+            msg.body("OK. Por favor, dime el nombre correcto.")
+        elif field == 'ciudad':
+            session['state'] = 'CORRECTING_CITY'
+            msg.body("OK. ¿Cuál es la ciudad correcta? (Bucaramanga, Piedecuesta o Floridablanca)")
+        elif field == 'direccion':
+            session['state'] = 'CORRECTING_ADDRESS'
+            msg.body("OK. Por favor, dime la dirección correcta.")
+        elif field == 'servicio':
+            session['state'] = 'CORRECTING_SERVICE_TYPE'
+            msg.body(get_service_list_message())
+        elif field == 'pago':
+            session['state'] = 'CORRECTING_PAYMENT_METHOD'
+            msg.body("OK. ¿Cuál es el método de pago correcto? (*Efectivo* o *Nequi*)")
+        else:
+            msg.body("No entendí. Por favor, elige una de las opciones: *nombre*, *ciudad*, *direccion*, *servicio*, *pago*.")
+
+    # --- Estados de Corrección Individuales ---
+    elif state == 'CORRECTING_NAME':
+        data['nombre'] = message_body.title()
+        session['state'] = 'CONFIRMATION'
+        msg.body(f"Dato actualizado.\n\n{get_summary_message(data)}")
+    
+    elif state == 'CORRECTING_CITY':
+        if message_body_lower not in ['bucaramanga', 'piedecuesta', 'floridablanca']:
+            msg.body("Ciudad no válida. Elige *Bucaramanga*, *Piedecuesta* o *Floridablanca*.")
+        else:
+            data['ciudad'] = message_body.capitalize()
+            session['state'] = 'CONFIRMATION'
+            msg.body(f"Dato actualizado.\n\n{get_summary_message(data)}")
+            
+    elif state == 'CORRECTING_ADDRESS':
+        data['direccion'] = message_body
+        session['state'] = 'CONFIRMATION'
+        msg.body(f"Dato actualizado.\n\n{get_summary_message(data)}")
+
+    elif state == 'CORRECTING_SERVICE_TYPE':
+        try:
+            choice = int(message_body)
+            if 1 <= choice <= len(AVAILABLE_SERVICES):
+                data['detalle_servicio'] = AVAILABLE_SERVICES[choice - 1]
+                session['state'] = 'CONFIRMATION'
+                msg.body(f"Dato actualizado.\n\n{get_summary_message(data)}")
+            else:
+                msg.body("Opción no válida. Por favor, responde solo con el *número* del servicio.")
+        except (ValueError, IndexError):
+            msg.body("Respuesta no válida. Por favor, usa solo el *número* del servicio.")
+
+    elif state == 'CORRECTING_PAYMENT_METHOD':
+        if message_body_lower not in ['efectivo', 'nequi']:
+            msg.body("Método de pago no válido. Elige *Efectivo* o *Nequi*.")
+        else:
+            data['metodo_pago'] = message_body.capitalize()
+            session['state'] = 'CONFIRMATION'
+            msg.body(f"Dato actualizado.\n\n{get_summary_message(data)}")
+    
     else:
-        # CORRECCIÓN: Se añade 'return' para evitar que la sesión se guarde de nuevo.
-        msg.body("Lo siento, hubo un problema y no sé en qué estado te encuentras. Para empezar de nuevo, escribe 'hola'.")
+        msg.body("Lo siento, ocurrió un error y perdí el hilo de la conversación. Escribe 'hola' para empezar de nuevo.")
         delete_session(sender_id)
-        return str(resp)
 
     session['data'] = data
     save_session(sender_id, session)
     return str(resp)
-
 
 # --- Punto de Entrada de la Aplicación ---
 if __name__ == "__main__":

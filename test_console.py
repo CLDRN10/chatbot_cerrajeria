@@ -5,7 +5,7 @@ import json
 BASE_URL = "http://127.0.0.1:5000/whatsapp"
 
 # Un identificador de remitente único para simular un usuario
-SENDER_ID = "whatsapp:+573001234567" # Cambia el número para reiniciar la conversación
+SENDER_ID = "whatsapp:+573001234568" # Cambia el número para reiniciar la conversación
 
 def make_request(message):
     """Función para simular el envío de un mensaje a Twilio y recibir la respuesta."""
