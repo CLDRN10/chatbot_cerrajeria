@@ -30,24 +30,19 @@ CREATE TABLE servicio (
     hora_s TIME NOT NULL,
     tipo_s VARCHAR(100) NOT NULL,
     estado_s VARCHAR(20) DEFAULT 'pendiente' 
-        CONSTRAINT ck1_servicio CHECK (estado_s IN ('pendiente', 'en proceso', 'finalizado')),
+        CONSTRAINT ck1_servicio CHECK (estado_s IN ('pendiente', 'en proceso', 'finalizado', 'cancelado')),
     monto_pago NUMERIC(10,2) NOT NULL 
         CONSTRAINT ck2_servicio CHECK (monto_pago >= 0),
     metodo_pago VARCHAR(30) NOT NULL 
         CONSTRAINT ck3_servicio CHECK (
             LOWER(metodo_pago) IN ('efectivo', 'nequi')
         ),
-    detalle_pago VARCHAR(30),
     id_cliente INT NOT NULL,
     id_cerrajero INT NOT NULL,
     CONSTRAINT fk1_servicio FOREIGN KEY (id_cliente) 
         REFERENCES cliente (id_cliente) ON DELETE CASCADE,
     CONSTRAINT fk2_servicio FOREIGN KEY (id_cerrajero) 
-        REFERENCES cerrajero (id_cerrajero) ON DELETE RESTRICT,
-    CONSTRAINT ck4_servicio CHECK (
-        (LOWER(metodo_pago) = 'nequi' AND detalle_pago IS NOT NULL)
-        OR (LOWER(metodo_pago) = 'efectivo' AND detalle_pago IS NULL)
-    )
+        REFERENCES cerrajero (id_cerrajero) ON DELETE RESTRICT
 );
 
 -- TABLA HISTORIAL DE ESTADOS

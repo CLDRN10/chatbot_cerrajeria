@@ -18,6 +18,7 @@
       --cancelado: #ff4b4b;
       --finalizado: #5ee072;
       --pendiente: #ffcc33;
+      --en-proceso: #a29bfe; /* Nuevo color para 'en proceso' */
     }
 
     body {
@@ -45,10 +46,7 @@
       animation: fadeIn 0.6s ease;
     }
 
-    .service-card::-webkit-scrollbar {
-      width: 8px;
-    }
-
+    .service-card::-webkit-scrollbar { width: 8px; }
     .service-card::-webkit-scrollbar-thumb {
       background-color: var(--accent);
       border-radius: 20px;
@@ -77,14 +75,8 @@
       transition: 0.2s;
     }
 
-    .back-btn:hover {
-      transform: translateY(-2px);
-    }
-
-    .back-btn img {
-      width: 20px;
-      height: 20px;
-    }
+    .back-btn:hover { transform: translateY(-2px); }
+    .back-btn img { width: 20px; height: 20px; }
 
     .texto h3 {
       font-weight: 900;
@@ -129,9 +121,7 @@
       transition: 0.2s;
     }
 
-    .service-item.selected {
-      border: 3px solid var(--accent);
-    }
+    .service-item.selected { border: 3px solid var(--accent); }
 
     .estado-chip {
       padding: 4px 10px;
@@ -141,28 +131,24 @@
       border: none;
       cursor: pointer;
       transition: 0.2s;
+      text-transform: capitalize;
     }
 
-    .estado-pendiente {
-      background: var(--pendiente);
-      color: var(--text-dark);
-    }
-
-    .estado-finalizado {
-      background: var(--finalizado);
-      color: var(--text-dark);
-    }
-
-    .estado-cancelado {
-      background: var(--cancelado);
-      color: #fff;
-    }
+    .estado-pendiente { background: var(--pendiente); color: var(--text-dark); }
+    .estado-en-proceso { background: var(--en-proceso); color: var(--text-dark); }
+    .estado-finalizado { background: var(--finalizado); color: var(--text-dark); }
+    .estado-cancelado { background: var(--cancelado); color: #fff; }
 
     .no-data {
       text-align: center;
       margin-top: 20px;
       color: #ccc;
       font-size: 0.9rem;
+    }
+    
+    .swal2-popup.swal2-custom {
+        border-radius: 20px !important;
+        box-shadow: 0 0 28px rgba(255, 204, 51, 0.45) !important;
     }
   </style>
 </head>
@@ -171,7 +157,7 @@
 
   <div class="service-card">
 
-    <button class="back-btn" onclick="location.href='inicio.html'">
+    <button class="back-btn" onclick="location.href='{{ url_for('inicio_page') }}'">
       <img src="https://cdn-icons-png.flaticon.com/512/271/271220.png">
     </button>
 
@@ -193,33 +179,19 @@
     let servicioSeleccionado = null;
 
     document.addEventListener("DOMContentLoaded", () => {
-      cargarServiciosDemo();
       cargarServicios();
     });
 
-    function cargarServiciosDemo() {
-      if (!localStorage.getItem("servicios")) {
-        const demo = [
-          {
-            id: 1,
-            tipo: "Instalación de chapas",
-            cliente: "Juan Pérez",
-            direccion: "Calle 12 #34-56",
-            municipio: "Bucaramanga",
-            fecha: "12/02/2025",
-            hora: "14:30",
-            valorFormatted: "55.000",
-            cerrajero: "Jose",
-            estado: "Estado"
-          }
-        ];
-        localStorage.setItem("servicios", JSON.stringify(demo));
+    async function cargarServicios() {
+      try {
+        const response = await fetch("{{ url_for('get_all_servicios') }}");
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        const servicios = await response.json();
+        mostrarServicios(servicios);
+      } catch (error) {
+        console.error("Error al cargar servicios:", error);
+        swalAjustado({ icon: "error", title: "Error de red", text: "No se pudieron cargar los servicios.", background: "#143b71", color: "#fff", confirmButtonColor: "#fed130" });
       }
-    }
-
-    function cargarServicios() {
-      const lista = JSON.parse(localStorage.getItem("servicios")) || [];
-      mostrarServicios(lista);
     }
 
     function mostrarServicios(lista) {
@@ -227,45 +199,36 @@
       const vacio = document.getElementById("noServicios");
       contenedor.innerHTML = "";
 
-      if (lista.length === 0) {
-        vacio.style.display = "block";
-        return;
-      }
-
-      vacio.style.display = "none";
+      vacio.style.display = lista.length === 0 ? "block" : "none";
 
       lista.forEach(serv => {
-
-        let estadoClase = "estado-pendiente";
-        if (serv.estado === "Finalizado") estadoClase = "estado-finalizado";
-        if (serv.estado === "Cancelado") estadoClase = "estado-cancelado";
+        const estadoClase = `estado-${serv.estado.replace(' ', '-')}`;
+        const valorFormatted = new Intl.NumberFormat('es-CO').format(serv.valor);
 
         const div = document.createElement("div");
         div.className = "service-item";
+        div.dataset.id = serv.id_servicio;
 
         div.innerHTML = `
           <div style="display:flex; justify-content:space-between; align-items:center;">
             <h5><b>${serv.tipo}</b></h5>
             <button class="estado-chip ${estadoClase}"
-              onclick="cambiarEstado(${serv.id}); event.stopPropagation();">
-              ${serv.estado || "Estado"}
+              onclick="cambiarEstado(${serv.id_servicio}); event.stopPropagation();">
+              ${serv.estado}
             </button>
           </div>
-
           <p><b>Cliente:</b> ${serv.cliente}</p>
           <p><b>Dirección:</b> ${serv.direccion}</p>
           <p><b>Municipio:</b> ${serv.municipio}</p>
-
           <div style="display:flex; gap:20px;">
             <p><b>Fecha:</b> ${serv.fecha}</p>
             <p><b>Hora:</b> ${serv.hora}</p>
           </div>
-
-          <p><b>Valor:</b> $${serv.valorFormatted}</p>
+          <p><b>Valor:</b> $${valorFormatted}</p>
           <p><b>Cerrajero:</b> ${serv.cerrajero}</p>
         `;
 
-        div.onclick = () => seleccionarServicio(div, serv.id);
+        div.onclick = () => seleccionarServicio(div, serv.id_servicio);
         contenedor.appendChild(div);
       });
     }
@@ -277,153 +240,89 @@
     }
 
     function cambiarEstado(id) {
+      const estados = [
+        { nombre: 'pendiente', color: '#ffcc33', bg: '#fff7d1', text: '#8a6a00' },
+        { nombre: 'en proceso', color: '#a29bfe', bg: '#e8e6ff', text: '#2d3436' },
+        { nombre: 'finalizado', color: '#5ee072', bg: '#e8ffe8', text: '#0d6b2e' },
+        { nombre: 'cancelado', color: '#ff4b4b', bg: '#ffe8e8', text: '#a80000' }
+      ];
+
+      const botonesHtml = estados.map(estado => `
+        <button onclick="guardarNuevoEstado(${id}, '${estado.nombre}')"
+          style="background:${estado.bg}; color:${estado.text}; border:2px solid ${estado.color}; font-weight:700; padding:10px; border-radius:12px; transition:.2s; text-transform: capitalize;"
+          onmouseover="this.style.filter='brightness(1.1)'" onmouseout="this.style.filter='brightness(1)'">
+          ${estado.nombre}
+        </button>
+      `).join('');
 
       Swal.fire({
-        title: "Cambiar estado",
-        background: "rgba(20, 59, 113, 0.95)",
-        color: "#fff",
-        width: "430px",
-        padding: "1.5rem",
-        showConfirmButton: false,
-        showCancelButton: true,
-        cancelButtonText: "Cerrar",
-        cancelButtonColor: "#ffcc33",
-        didOpen: () => {
-          const box = document.querySelector(".swal2-popup");
-          box.style.borderRadius = "20px";
-          box.style.width = "430px";
-          box.style.boxShadow = "0 0 28px rgba(255, 204, 51, 0.45)";
-        },
-        html: `
-          <div style="display:flex; flex-direction:column; gap:12px; width:100%;">
-
-            <button onclick="guardarNuevoEstado(${id}, 'Pendiente')"
-              style="background:#fff7d1; color:#8a6a00; border:2px solid #ffcc33;
-              font-weight:700; padding:10px; border-radius:12px; transition:.2s;"
-              onmouseover="this.style.filter='brightness(1.1)'"
-              onmouseout="this.style.filter='brightness(1)'">
-              Pendiente
-            </button>
-
-            <button onclick="guardarNuevoEstado(${id}, 'Finalizado')"
-              style="background:#e8ffe8; color:#0d6b2e; border:2px solid #5ee072;
-              font-weight:700; padding:10px; border-radius:12px; transition:.2s;"
-              onmouseover="this.style.filter='brightness(1.1)'"
-              onmouseout="this.style.filter='brightness(1)'">
-              Finalizado
-            </button>
-
-            <button onclick="guardarNuevoEstado(${id}, 'Cancelado')"
-              style="background:#ffe8e8; color:#a80000; border:2px solid #ff4b4b;
-              font-weight:700; padding:10px; border-radius:12px; transition:.2s;"
-              onmouseover="this.style.filter='brightness(1.1)'"
-              onmouseout="this.style.filter='brightness(1)'">
-              Cancelado
-            </button>
-
-          </div>
-        `,
+        title: "Cambiar estado", background: "rgba(20, 59, 113, 0.95)", color: "#fff", width: "430px",
+        padding: "1.5rem", showConfirmButton: false, showCancelButton: true, cancelButtonText: "Cerrar",
+        cancelButtonColor: "#ffcc33", html: `<div style="display:flex; flex-direction:column; gap:12px; width:100%;">${botonesHtml}</div>`,
+        customClass: { popup: 'swal2-custom' }
       });
     }
 
-    function swalAjustado(config) {
-      Swal.fire({
-        ...config,
-        width: "430px",
-        didOpen: () => {
-          const box = document.querySelector(".swal2-popup");
-          box.style.borderRadius = "20px";
-          box.style.width = "430px";
-          box.style.boxShadow = "0 0 28px rgba(255, 204, 51, 0.45)";
-        }
-      });
-    }
+    async function guardarNuevoEstado(id, nuevoEstado) {
+      try {
+        const response = await fetch(`/api/servicios/update_status`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id_servicio: id, nuevo_estado: nuevoEstado })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.detalle || 'Error en el servidor');
+        
+        Swal.close();
+        cargarServicios();
 
-    function guardarNuevoEstado(id, estado) {
-      let lista = JSON.parse(localStorage.getItem("servicios")) || [];
-
-      lista = lista.map(s => {
-        if (s.id === id) s.estado = estado;
-        return s;
-      });
-
-      localStorage.setItem("servicios", JSON.stringify(lista));
-      Swal.close();
-      cargarServicios();
-
-      swalAjustado({
-        icon: "success",
-        title: "Estado actualizado",
-        text: "Nuevo estado: " + estado,
-        background: "#143b71",
-        color: "#fff",
-        confirmButtonColor: "#fed130",
-        timer: 1300
-      });
+        swalAjustado({ icon: "success", title: "Estado actualizado", background: "#143b71", color: "#fff", confirmButtonColor: "#fed130", timer: 1500 });
+      } catch (error) {
+        console.error("Error al guardar estado:", error);
+        swalAjustado({ icon: "error", title: "Error", text: `No se pudo actualizar el estado: ${error.message}`, background: "#143b71", color: "#fff", confirmButtonColor: "#fed130" });
+      }
     }
 
     function editarServicio() {
       if (!servicioSeleccionado) {
-        return swalAjustado({
-          icon: "info",
-          title: "Selecciona un servicio",
-          background: "#143b71",
-          color: "#fff",
-          confirmButtonColor: "#fed130",
-        });
+        return swalAjustado({ icon: "info", title: "Selecciona un servicio", background: "#143b71", color: "#fff", confirmButtonColor: "#fed130" });
       }
-
-      localStorage.setItem("servicioEditar", servicioSeleccionado);
-      window.location.href = "agregar.html";
+      localStorage.setItem("servicioEditarId", servicioSeleccionado);
+      window.location.href = "{{ url_for('agregar_page') }}";
     }
 
     function eliminarServicio() {
       if (!servicioSeleccionado) {
-        return swalAjustado({
-          icon: "info",
-          title: "Selecciona un servicio",
-          background: "#143b71",
-          color: "#fff",
-          confirmButtonColor: "#fed130",
-        });
+        return swalAjustado({ icon: "info", title: "Selecciona un servicio", background: "#143b71", color: "#fff", confirmButtonColor: "#fed130" });
       }
 
-      Swal.fire({
-        title: "¿Eliminar servicio?",
-        text: "Esta acción no se puede deshacer.",
-        icon: "warning",
-        showCancelButton: true,
-        confirmButtonColor: "#e5b800",
-        cancelButtonColor: "#143b71",
-        confirmButtonText: "Sí, eliminar",
-        cancelButtonText: "Cancelar",
-        background: "#143b71",
-        color: "#fff",
-        width: "430px",
-        didOpen: () => {
-          const box = document.querySelector(".swal2-popup");
-          box.style.borderRadius = "20px";
-          box.style.width = "430px";
-          box.style.boxShadow = "0 0 28px rgba(255, 204, 51, 0.45)";
-        }
-      }).then(result => {
+      swalAjustado({
+        title: '¿Eliminar servicio?', text: "Esta acción no se puede deshacer.", icon: 'warning',
+        showCancelButton: true, confirmButtonColor: "#e5b800", cancelButtonColor: "#3085d6",
+        confirmButtonText: 'Sí, eliminar', cancelButtonText: 'Cancelar', background: "#143b71", color: "#fff"
+      }).then(async (result) => {
         if (result.isConfirmed) {
-          let lista = JSON.parse(localStorage.getItem("servicios")) || [];
-          lista = lista.filter(s => s.id !== servicioSeleccionado);
-          localStorage.setItem("servicios", JSON.stringify(lista));
-          servicioSeleccionado = null;
-          cargarServicios();
-
-          swalAjustado({
-            icon: "success",
-            title: "Eliminado",
-            background: "#143b71",
-            color: "#fff",
-            confirmButtonColor: "#fed130",
-          });
+          try {
+            const response = await fetch(`/api/servicios/${servicioSeleccionado}`, { method: 'DELETE' });
+            const apiResult = await response.json();
+            if (!response.ok) throw new Error(apiResult.detalle || 'Error en el servidor');
+            
+            servicioSeleccionado = null;
+            cargarServicios();
+            swalAjustado({ icon: "success", title: "Eliminado", text: "El servicio ha sido eliminado.", background: "#143b71", color: "#fff", confirmButtonColor: "#fed130", timer: 1500 });
+          } catch (error) {
+            console.error("Error al eliminar:", error);
+            swalAjustado({ icon: "error", title: "Error", text: `No se pudo eliminar el servicio: ${error.message}`, background: "#143b71", color: "#fff", confirmButtonColor: "#fed130" });
+          }
         }
       });
     }
+
+    function swalAjustado(config) {
+        // BUG FIX: Se añade "return" para que la promesa de Swal.fire se pueda encadenar con .then()
+        return Swal.fire({ ...config, width: "430px", customClass: { popup: 'swal2-custom' } });
+    }
+
   </script>
 
 </body>

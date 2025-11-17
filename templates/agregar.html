@@ -173,40 +173,45 @@
   <div class="page-wrap">
     <div class="service-card" id="serviceCard">
 
-      <button class="back-btn" onclick="location.href='inicio.html'">
+      <button class="back-btn" id="backButton">
         <img src="https://cdn-icons-png.flaticon.com/512/271/271220.png">
       </button>
 
       <div class="titulo">
-        <h3>¿Qué servicio <br/> deseas agregar hoy?</h3>
+        <h3 id="formTitle">¿Qué servicio <br/> deseas agregar hoy?</h3>
       </div>
 
       <div class="register-card">
-        <form id="serviceForm" onsubmit="event.preventDefault(); guardarServicio();">
+        <form id="serviceForm">
 
           <div class="mb-2">
             <label for="Tipos">Tipo de servicio</label>
             <select id="Tipos" class="form-select" required>
-              <option value="">Seleccionar</option>
-              <option value="vehiculos">Apertura de automóvil</option>
-              <option value="cajas_fuertes">Apertura de caja fuerte</option>
-              <option value="candandos">Apertura de candado</option>
-              <option value="vehiculos2">Apertura de motocicleta</option>
-              <option value="apertura">Apertura de puerta residencial</option>
-              <option value="clave2">Cambio de clave de automóvil</option>
-              <option value="clave1">Cambio de clave de motocicleta</option>
-              <option value="residencia">Cambio de clave residencial</option>
-              <option value="copia_llave">Duplicado de llave</option>
-              <option value="llaves">Elaboración de llaves</option>
-              <option value="alarmas">Instalación de alarma</option>
-              <option value="instalar_chapas">Instalación de chapa</option>
-              <option value="reparacion">Reparación general</option>
+                <option value="" disabled selected>Seleccionar</option>
+                <option value="Apertura de automóvil">Apertura de automóvil</option>
+                <option value="Apertura de caja fuerte">Apertura de caja fuerte</option>
+                <option value="Apertura de candado">Apertura de candado</option>
+                <option value="Apertura de motocicleta">Apertura de motocicleta</option>
+                <option value="Apertura de puerta residencial">Apertura de puerta residencial</option>
+                <option value="Cambio de clave de automóvil">Cambio de clave de automóvil</option>
+                <option value="Cambio de clave de motocicleta">Cambio de clave de motocicleta</option>
+                <option value="Cambio de clave residencial">Cambio de clave residencial</option>
+                <option value="Duplicado de llave">Duplicado de llave</option>
+                <option value="Elaboración de llaves">Elaboración de llaves</option>
+                <option value="Instalación de alarma">Instalación de alarma</option>
+                <option value="Instalación de chapa">Instalación de chapa</option>
+                <option value="Reparación general">Reparación general</option>
             </select>
           </div>
 
           <div class="mb-2">
             <label for="nombreCliente">Nombre del cliente</label>
             <input type="text" id="nombreCliente" class="form-control" required>
+          </div>
+
+          <div class="mb-2">
+            <label for="telefonoCliente">Teléfono del cliente</label>
+            <input type="text" id="telefonoCliente" class="form-control" required pattern="[0-9]{7,13}" title="Ingresa un teléfono válido (7-13 dígitos)">
           </div>
 
           <div class="mb-2">
@@ -217,7 +222,7 @@
           <div class="mb-2">
             <label for="municipio">Municipio</label>
             <select id="municipio" class="form-select" required>
-              <option value="">Seleccionar</option>
+              <option value="" disabled selected>Seleccionar</option>
               <option value="Bucaramanga">Bucaramanga</option>
               <option value="Floridablanca">Floridablanca</option>
               <option value="Piedecuesta">Piedecuesta</option>
@@ -229,47 +234,61 @@
               <label for="fecha">Fecha</label>
               <input type="text" id="fecha" class="form-control datepicker" required>
             </div>
-           <div class="mb-2">
-  <label for="hora">Hora</label>
-  <input type="text" id="hora" class="form-control" placeholder="Seleccionar hora" required>
-</div>
+            <div class="col-5 mb-2">
+              <label for="hora">Hora</label>
+              <input type="text" id="hora" class="form-control" placeholder="Seleccionar hora" required>
+            </div>
+          </div>
 
-
-      <div class="mb-2">
-  <label for="valor">Valor del servicio</label>
-  <div class="valor-wrap">
-    <span class="currency">$</span>
-    <input type="text" id="valor" class="form-control" required>
-  </div>
-</div>
-
+          <div class="row g-2">
+            <div class="col-7 mb-2">
+                <label for="valor">Valor del servicio</label>
+                <div class="valor-wrap">
+                <span class="currency">$</span>
+                <input type="text" id="valor" class="form-control" required>
+                </div>
+            </div>
+            <div class="col-5 mb-2">
+                <label for="metodoPago">Método Pago</label>
+                <select id="metodoPago" class="form-select" required>
+                    <option value="efectivo">Efectivo</option>
+                    <option value="nequi">Nequi</option>
+                </select>
+            </div>
+          </div>
 
           <div class="mb-2">
             <label for="cerrajero">Cerrajero</label>
             <select id="cerrajero" class="form-select" required>
-              <option value="">Seleccionar</option>
-              <option value="Jose">Jose Hernández</option>
+              <option value="" disabled selected>Seleccionar</option>
+              <option value="Jose Hernández">Jose Hernández</option>
               <option value="Otro">Otro</option>
             </select>
           </div>
 
           <div class="mb-2" id="otro-cerrajero-container" style="display:none">
-            <label for="otroCerrajero">Nombre del cerrajero</label>
-            <input type="text" id="otroCerrajero" class="form-control">
+            <div class="mb-2">
+                <label for="otroCerrajero">Nombre del cerrajero</label>
+                <input type="text" id="otroCerrajero" class="form-control">
+            </div>
+            <div class="mb-2">
+                <label for="otroCerrajeroTelefono">Teléfono del cerrajero</label>
+                <input type="text" id="otroCerrajeroTelefono" class="form-control" pattern="[0-9]+" title="Ingresa solo números">
+            </div>
           </div>
 
           <div class="mb-2">
             <label for="estadoServicio">Estado</label>
             <select id="estadoServicio" class="form-select" required>
-              <option value="">Seleccionar estado</option>
-              <option value="Pendiente">Pendiente</option>
-              <option value="Finalizado">Finalizado</option>
-              <option value="Cancelado">Cancelado</option>
+              <option value="" disabled selected>Seleccionar estado</option>
+              <option value="pendiente">Pendiente</option>
+              <option value="en proceso">En proceso</option>
+              <option value="finalizado">Finalizado</option>
+              <option value="cancelado">Cancelado</option>
             </select>
           </div>
 
-          <button class="btn-service mt-3" type="submit">Guardar Servicio</button>
-
+          <button class="btn-service mt-3" type="submit" id="submitButton">Guardar Servicio</button>
         </form>
       </div>
 
@@ -282,130 +301,141 @@
   <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script>
 
   <script>
+    let editId = null;
 
-    (function(){
+    // Inicializadores de plugins
+    $('#Tipos, #municipio, #cerrajero, #estadoServicio, #metodoPago').select2({
+        minimumResultsForSearch: Infinity, width: '100%', dropdownParent: $('.register-card')
+    });
+    flatpickr(".datepicker", { locale: "es", dateFormat: "d/m/Y", disableMobile: true });
+    flatpickr("#hora", { enableTime: true, noCalendar: true, dateFormat: "h:i K", minuteIncrement: 5, time_24hr: false, disableMobile: true });
 
-      $('#Tipos, #municipio, #cerrajero, #estadoServicio').select2({
-        minimumResultsForSearch: Infinity,
-        width: '100%',
-        dropdownParent: $('.register-card')
-      });
-
-      flatpickr(".datepicker", {
-        locale: "es",
-        dateFormat: "d/m/Y",
-        disableMobile: true
-      });
-
-      flatpickr(".timepicker", {
-        locale: "es",
-        enableTime: true,
-        noCalendar: true,
-        dateFormat: "H:i",
-        time_24hr: true
-      });
-
-      $('#cerrajero').on('change', function(){
-        if($(this).val() === 'Otro'){
-          $('#otro-cerrajero-container').slideDown(150);
-          $('#otroCerrajero').attr('required', true);
+    // Lógica para mostrar/ocultar campos de "Otro cerrajero"
+    $('#cerrajero').on('change', function() {
+        const container = $('#otro-cerrajero-container');
+        if ($(this).val() === 'Otro') {
+            container.slideDown(150).find('input').attr('required', true);
         } else {
-          $('#otro-cerrajero-container').slideUp(120);
-          $('#otroCerrajero').removeAttr('required').val('');
+            container.slideUp(120).find('input').removeAttr('required').val('');
         }
-      });
+    });
 
-      window.guardarServicio = function(){
+    // Formateador de campo de valor monetario
+    document.getElementById("valor").addEventListener("input", function (e) {
+        let value = e.target.value.replace(/\D/g, "");
+        e.target.value = new Intl.NumberFormat("es-CO").format(value);
+    });
 
-        const tipo = $('#Tipos').val();
-        const cliente = $('#nombreCliente').val().trim();
-        const direccion = $('#direccion').val().trim();
-        const municipio = $('#municipio').val();
-        const fecha = $('#fecha').val().trim();
-        const hora = $('#hora').val().trim();
-        const valor = $('#valor').val().trim();
-        const cerrajero = $('#cerrajero').val();
-        const otroCerrajero = $('#otroCerrajero').val().trim();
-        const estado = $('#estadoServicio').val();
+    // --- LÓGICA DEL BOTÓN DE REGRESAR (CORREGIDA) ---
+    document.getElementById("backButton").addEventListener('click', () => {
+        // La lógica se determina por si estamos en modo de edición o no.
+        const currentEditId = localStorage.getItem("servicioEditarId");
+        
+        // Limpiar localStorage en cualquier caso antes de navegar
+        localStorage.removeItem("servicioEditarId");
 
-        if(!tipo || !cliente || !direccion || !municipio || !fecha || !hora || !valor || !cerrajero || !estado){
-          return Swal.fire({
-            icon:'warning',
-            title:'Campos incompletos',
-            text:'Debes completar todos los campos.',
-            customClass:{ popup:'swal-centered' }
-          });
+        if (currentEditId) {
+            // Si existía un ID de edición, veníamos de la página de servicios.
+            window.location.href = "{{ url_for('show_servicios_page') }}";
+        } else {
+            // Si no existía, veníamos de la página de inicio.
+            window.location.href = "{{ url_for('inicio_page') }}";
         }
+    });
 
-        if(cerrajero === 'Otro' && !otroCerrajero){
-          return Swal.fire({
-            icon:'warning',
-            title:'Falta nombre',
-            text:'Ingresa el nombre del cerrajero.',
-            customClass:{ popup:'swal-centered' }
-          });
+    // --- LÓGICA PRINCIPAL AL CARGAR LA PÁGINA ---
+    document.addEventListener('DOMContentLoaded', async () => {
+        editId = localStorage.getItem('servicioEditarId');
+        if (editId) {
+            document.querySelector('#formTitle').innerHTML = 'Actualizar <br/> Servicio';
+            document.querySelector('#submitButton').textContent = 'Actualizar Servicio';
+            await loadServiceForEdit(editId);
+        } else {
+            const now = new Date();
+            $('#fecha').val(now.toLocaleDateString('es-CO', {day:'2-digit', month:'2-digit', year:'numeric'}));
+            $('#hora').val(now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }));
         }
+    });
 
-        Swal.fire({
-  icon: 'success',
-  title: 'Servicio guardado',
-  html: `
-    <p>El servicio fue registrado exitosamente.</p>
-    <div style="display:flex; flex-direction:column; gap:10px; margin-top:15px;">
-      <button id="nuevoServicioBtn" class="swal2-confirm swal2-styled" style="background:#fed130; color:#082a65; border-radius:10px; font-weight:700;">
-        Agregar otro servicio
-      </button>
+    async function loadServiceForEdit(id) {
+        try {
+            const response = await fetch(`/api/servicios/${id}`);
+            if (!response.ok) throw new Error('No se pudo cargar la información del servicio.');
+            const data = await response.json();
 
-      <button id="verServiciosBtn" class="swal2-confirm swal2-styled" style="background:#fff; color:#082a65; border-radius:10px; font-weight:700; border:2px solid #fed130;">
-        Ver servicios
-      </button>
-    </div>
-  `,
-  showConfirmButton: false,
-  customClass: { popup: 'swal-centered' },
-  didRender: () => {
+            $('#Tipos').val(data.tipo_s).trigger('change');
+            $('#nombreCliente').val(data.nombre_c);
+            $('#telefonoCliente').val(data.telefono_c);
+            $('#direccion').val(data.direccion_c);
+            $('#municipio').val(data.ciudad_c).trigger('change');
+            $('#fecha').val(data.fecha_s);
+            $('#hora').val(data.hora_s);
+            $('#valor').val(new Intl.NumberFormat("es-CO").format(data.monto_pago));
+            $('#metodoPago').val(data.metodo_pago).trigger('change');
+            $('#cerrajero').val(data.nombre_ce).trigger('change');
+            $('#estadoServicio').val(data.estado_s).trigger('change');
 
-    document.getElementById("nuevoServicioBtn").onclick = () => {
-      Swal.close();
-      document.getElementById("serviceForm").reset();
-      $('#Tipos, #municipio, #cerrajero, #estadoServicio').val('').trigger('change');
-      $('#otro-cerrajero-container').hide();
-    };
+        } catch (error) {
+            console.error("Error al cargar datos para editar:", error);
+            Swal.fire({ icon: 'error', title: 'Error', text: error.message, background: '#143b71', color: '#fff', confirmButtonColor: '#fed130' });
+        }
+    }
 
-    document.getElementById("verServiciosBtn").onclick = () => {
-      window.location.href = "servicios.html";
-    };
+    // --- FUNCIÓN PARA MANEJAR EL ENVÍO DEL FORMULARIO ---
+    document.getElementById('serviceForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const datos = {
+            tipo: $('#Tipos').val(),
+            cliente: $('#nombreCliente').val().trim(),
+            telefono_cliente: $('#telefonoCliente').val().trim(),
+            direccion: $('#direccion').val().trim(),
+            municipio: $('#municipio').val(),
+            fecha: $('#fecha').val().trim(),
+            hora: $('#hora').val().trim(),
+            valor: $('#valor').val().trim().replace(/\./g, ''),
+            metodo_pago: $('#metodoPago').val(),
+            cerrajero: $('#cerrajero').val(),
+            otroCerrajero: $('#otroCerrajero').val().trim(),
+            otroCerrajeroTelefono: $('#otroCerrajeroTelefono').val().trim(),
+            estado: $('#estadoServicio').val(),
+        };
+        
+        const url = editId ? `/api/servicios/${editId}` : "{{ url_for('add_new_service') }}";
+        const method = editId ? 'PUT' : 'POST';
 
-  }
-});
+        try {
+            const response = await fetch(url, {
+                method: method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(datos)
+            });
+            const result = await response.json();
 
+            if (!response.ok) {
+                throw new Error(result.detalle || 'Error del servidor');
+            }
 
-      }
+            if (editId) {
+                localStorage.removeItem('servicioEditarId');
+            }
 
-    })();
+            Swal.fire({
+                icon: 'success',
+                title: `¡Servicio ${editId ? 'actualizado' : 'guardado'}!`,
+                text: 'Los datos se han guardado correctamente.',
+                background: '#143b71', color: '#fff', confirmButtonColor: '#fed130'
+            }).then(() => {
+                window.location.href = "{{ url_for('show_servicios_page') }}";
+            });
 
-const precioInput = document.getElementById("valor");
+        } catch (error) {
+            console.error('Error al guardar:', error);
+            Swal.fire({ icon: 'error', title: 'Error de Envío', text: error.message, background: '#143b71', color: '#fff', confirmButtonColor: '#fed130' });
+        }
+    });
 
-precioInput.addEventListener("input", function () {
-  let soloNumeros = precioInput.value.replace(/\D/g, "");
-
-  if (soloNumeros === "") {
-    precioInput.value = "";
-    return;
-  }
-
-  precioInput.value = new Intl.NumberFormat("es-CO").format(soloNumeros);
-});
-
-flatpickr("#hora", {
-  enableTime: true,
-  noCalendar: true,
-  dateFormat: "h:i K",  
-  minuteIncrement: 5,    
-  time_24hr: false,  
-  disableMobile: true, 
-});
-</script>
+  </script>
 
 </body>
 </html>

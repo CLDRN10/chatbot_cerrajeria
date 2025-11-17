@@ -122,28 +122,28 @@
 <body>
   <div class="service-card">
 
-    <button class="back-btn" onclick="location.href='login.html'">
+    <button class="back-btn" onclick="location.href='{{ url_for('login_page') }}'">
       <img src="https://cdn-icons-png.flaticon.com/512/271/271220.png" alt="Volver">
     </button>
 
-    <img src="../Static/LOGO.png" class="logo" alt="Logo">
+    <img src="{{ url_for('static', filename='LOGO.png') }}" class="logo" alt="Logo">
 
     <div class="texto">
       <h2>Bienvenido, <span>José</span></h2>
     </div>
 
     <div class="d-grid gap-3 mt-3">
-      <button class="btn-service" onclick="location.href='agregar.html'">
+      <button class="btn-service" onclick="location.href='{{ url_for('agregar_page') }}'">
         <img src="https://cdn-icons-png.flaticon.com/512/992/992651.png" alt="Agregar">
         Agregar Servicio
       </button>
 
-      <button class="btn-service" onclick="location.href='servicios.html'">
+      <button class="btn-service" onclick="location.href='{{ url_for('show_servicios_page') }}'">
         <img src="https://cdn-icons-png.flaticon.com/128/18994/18994211.png" alt="Ver">
         Ver Servicios
       </button>
 
-      <button class="btn-service" onclick="location.href='estadisticas.html'">
+      <button class="btn-service" onclick="location.href='{{ url_for('estadisticas_page') }}'">
         <img src="https://cdn-icons-png.flaticon.com/512/1828/1828919.png" alt="Estadísticas">
         Ver Estadísticas
       </button>

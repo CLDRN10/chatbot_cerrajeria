@@ -154,7 +154,7 @@
     <div class="login-card">
 
         <div class="logo-container">
-            <img src="../Static/LOGO.png" class="logo-image">
+            <img src="{{ url_for('static', filename='LOGO.png') }}" class="logo-image">
         </div>
 
         <h3 class="login-title">Cerrajería 24 Horas</h3>
@@ -165,15 +165,15 @@
             <button class="btn-login" type="submit">Iniciar sesión</button>
         </form>
 
-        <a href="#" class="forgot-password" onclick="recuperarContrasena()">¿Olvidaste tu contraseña?</a>
+        <a href="{{ url_for('clave_page') }}" class="forgot-password">¿Olvidaste tu contraseña?</a>
 
     </div>
 </div>
 
 <script>
     function validarLogin(){
-        const u = usuario.value.trim();
-        const p = contrasena.value.trim();
+        const u = document.getElementById('usuario').value.trim();
+        const p = document.getElementById('contrasena').value.trim();
 
         if(u === "Jose" && p === "1234"){
             Swal.fire({
@@ -186,7 +186,7 @@
                 timer:1500,
                 showConfirmButton:false,
                 customClass:{ popup:'swal-centered' }
-            }).then(()=> location.href="inicio.html");
+            }).then(()=> location.href = "{{ url_for('inicio_page') }}");
         } else {
             Swal.fire({
                 icon:'error',
@@ -202,9 +202,6 @@
         return false;
     }
 
-    function recuperarContrasena(){
-        window.location.href="clave.html";
-    }
 </script>
 
 </body>

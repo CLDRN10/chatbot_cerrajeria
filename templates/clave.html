@@ -147,7 +147,7 @@
 <div class="page-wrap">
   <div class="card-reset">
 
-    <button class="back-btn" onclick="location.href='login.html'">
+    <button class="back-btn" onclick="location.href='{{ url_for('login_page') }}'">
       <img src="https://cdn-icons-png.flaticon.com/512/271/271220.png">
     </button>
 
@@ -195,7 +195,7 @@ function guardarNuevaContrasena(){
     icon:"success",
     title:"¡Actualizada!",
     text:"Tu contraseña ha sido cambiada.",
-  }).then(()=> location.href="login.html");
+  }).then(()=> location.href="{{ url_for('login_page') }}");
 }
 </script>
 

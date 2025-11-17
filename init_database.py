@@ -1,105 +1,87 @@
-
 import os
 import psycopg2
-from psycopg2 import sql
 from dotenv import load_dotenv
 
-# --- Configuración Inicial ---
-load_dotenv()
+# --- Configuración de Entorno ---
+load_dotenv() # Carga las variables desde el archivo .env
 
-def get_db_connection():
-    """Establece la conexión con la base de datos usando la URL de entorno."""
-    db_url = os.environ.get("DATABASE_URL")
-    if not db_url:
-        raise ValueError("La variable de entorno DATABASE_URL no está configurada.")
-    return psycopg2.connect(db_url, sslmode='require')
+# --- Conexión a la Base de Datos ---
+DB_URL = os.environ.get("DATABASE_URL")
+if not DB_URL:
+    raise ValueError("No se encontró la variable de entorno DATABASE_URL. Asegúrate de que esté en el .env")
 
-def column_exists(cursor, table_name, column_name):
-    """Verifica si una columna existe en una tabla."""
-    cursor.execute("""
-        SELECT 1 FROM information_schema.columns
-        WHERE table_name = %s AND column_name = %s
-    """, (table_name, column_name))
-    return cursor.fetchone() is not None
+conn = psycopg2.connect(DB_URL, sslmode='require')
+cur = conn.cursor()
 
-def initialize_database():
-    """
-    Asegura que la base de datos tenga la estructura mínima requerida
-    sin eliminar datos existentes. Añade columnas si faltan.
-    """
-    conn = None
-    try:
-        conn = get_db_connection()
-        print("Conexión a la base de datos exitosa.")
+# --- Definición y Creación de Tablas ---
 
-        with conn.cursor() as cur:
-            print("Verificando y actualizando estructura de la base de datos...")
+# 1. Tabla de Cerrajeros
+cur.execute("""
+DROP TABLE IF EXISTS cerrajero CASCADE;
+CREATE TABLE cerrajero (
+    id_cerrajero SERIAL PRIMARY KEY,
+    nombre_ce VARCHAR(100) NOT NULL UNIQUE,
+    telefono_ce VARCHAR(15) NOT NULL,
+    CONSTRAINT ck1_cerrajero CHECK (telefono_ce ~ '^[0-9]+$')
+);
+""")
 
-            # 1. Asegurar columnas en la tabla 'cliente'
-            if not column_exists(cur, 'cliente', 'direccion_c'):
-                cur.execute("ALTER TABLE cliente ADD COLUMN direccion_c TEXT;")
-                print("- Columna 'direccion_c' añadida a la tabla 'cliente'.")
-            else:
-                print("- Columna 'direccion_c' ya existe en 'cliente'.")
+# 2. Tabla de Clientes
+cur.execute("""
+DROP TABLE IF EXISTS cliente CASCADE;
+CREATE TABLE cliente (
+    id_cliente SERIAL PRIMARY KEY,
+    nombre_c VARCHAR(100) NOT NULL,
+    telefono_c VARCHAR(15) NOT NULL UNIQUE,
+    direccion_c VARCHAR(255) NOT NULL,
+    ciudad_c VARCHAR(50) NOT NULL
+);
+""")
 
-            if not column_exists(cur, 'cliente', 'ciudad_c'):
-                cur.execute("ALTER TABLE cliente ADD COLUMN ciudad_c VARCHAR(100);")
-                print("- Columna 'ciudad_c' añadida a la tabla 'cliente'.")
-            else:
-                print("- Columna 'ciudad_c' ya existe en 'cliente'.")
+# 3. Tabla de Servicios (CORREGIDA - SIN detalle_pago)
+cur.execute("""
+DROP TABLE IF EXISTS servicio CASCADE;
+CREATE TABLE servicio (
+    id_servicio SERIAL PRIMARY KEY,
+    fecha_s DATE NOT NULL,
+    hora_s TIME NOT NULL,
+    tipo_s VARCHAR(100) NOT NULL,
+    estado_s VARCHAR(20) NOT NULL DEFAULT 'pendiente',
+    monto_pago NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+    metodo_pago VARCHAR(20) NOT NULL,
+    id_cliente INT NOT NULL,
+    id_cerrajero INT NOT NULL,
+    CONSTRAINT fk_cliente FOREIGN KEY (id_cliente) REFERENCES cliente (id_cliente),
+    CONSTRAINT fk_cerrajero FOREIGN KEY (id_cerrajero) REFERENCES cerrajero (id_cerrajero),
+    CONSTRAINT ck1_servicio CHECK (estado_s IN ('pendiente', 'en proceso', 'finalizado', 'cancelado')),
+    CONSTRAINT ck2_servicio CHECK (monto_pago >= 0),
+    CONSTRAINT ck3_servicio CHECK (metodo_pago IN ('efectivo', 'nequi'))
+);
+""")
 
-            # 2. Asegurar existencia de la tabla 'cerrajero' (sin disponibilidad)
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS cerrajero (
-                    id_cerrajero SERIAL PRIMARY KEY,
-                    nombre_ce VARCHAR(255) NOT NULL,
-                    telefono_ce VARCHAR(20)
-                );
-            """)
-            print("- Tabla 'cerrajero' verificada/creada.")
+# 4. Tabla de Sesiones de WhatsApp (Para el Chatbot)
+cur.execute("""
+DROP TABLE IF EXISTS whatsapp_sessions CASCADE;
+CREATE TABLE whatsapp_sessions (
+    id SERIAL PRIMARY KEY,
+    sender_id VARCHAR(255) NOT NULL UNIQUE,
+    session_data JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+""")
 
-            # 3. Asegurar existencia de la tabla 'servicio'
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS servicio (
-                    id_servicio SERIAL PRIMARY KEY,
-                    fecha_s DATE NOT NULL,
-                    hora_s TIME NOT NULL,
-                    tipo_s VARCHAR(255) NOT NULL,
-                    estado_s VARCHAR(50) DEFAULT 'pendiente',
-                    monto_pago NUMERIC(10, 2) DEFAULT 0.00,
-                    metodo_pago VARCHAR(50),
-                    detalle_pago TEXT,
-                    id_cliente INTEGER REFERENCES cliente(id_cliente),
-                    id_cerrajero INTEGER REFERENCES cerrajero(id_cerrajero)
-                );
-            """)
-            print("- Tabla 'servicio' verificada/creada.")
+# --- Inserción de Datos Iniciales ---
 
-            # 4. Asegurar cerrajero por defecto (sin disponibilidad)
-            cur.execute("SELECT 1 FROM cerrajero WHERE nombre_ce = 'Por Asignar';")
-            if cur.fetchone() is None:
-                cur.execute("""
-                    INSERT INTO cerrajero (nombre_ce, telefono_ce)
-                    VALUES ('Por Asignar', '0000000000');
-                """)
-                print("- Cerrajero por defecto 'Por Asignar' insertado.")
-            else:
-                print("- Cerrajero por defecto 'Por Asignar' ya existe.")
+# Insertar un cerrajero por defecto para el chatbot
+cur.execute("INSERT INTO cerrajero (nombre_ce, telefono_ce) VALUES (%s, %s);", ('Jose Hernández', '3111234567'))
 
-            conn.commit()
-        print("\n¡Éxito! La base de datos ha sido verificada y actualizada sin perder datos.")
+print("Base de datos inicializada correctamente.")
+print("- Se eliminaron las tablas existentes.")
+print("- Se crearon las tablas: cerrajero, cliente, servicio, whatsapp_sessions.")
+print("- Se insertó un cerrajero por defecto.")
 
-    except psycopg2.Error as e:
-        print(f"\nError de base de datos: {e}")
-        if conn:
-            conn.rollback()
-    except Exception as e:
-        print(f"\nOcurrió un error inesperado: {e}")
-    finally:
-        if conn:
-            conn.close()
-            print("Conexión a la base de datos cerrada.")
-
-if __name__ == "__main__":
-    print("Iniciando script de migración y verificación de base de datos...")
-    initialize_database()
+# --- Cierre de Conexión ---
+conn.commit()
+cur.close()
+conn.close()
