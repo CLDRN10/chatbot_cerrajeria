@@ -2,6 +2,7 @@ import os
 import json
 import psycopg2
 import psycopg2.extras
+import pytz  # Se importa la nueva librería
 from urllib.parse import urlparse
 from dotenv import load_dotenv
 import logging
@@ -271,7 +272,7 @@ def delete_service(service_id):
     finally:
         if conn: conn.close()
 
-# --- Lógica del Chatbot de WhatsApp (Versión Definitiva)---
+# --- Lógica del Chatbot de WhatsApp (Versión con Hora Correcta) ---
 AVAILABLE_SERVICES = [
     "Apertura de automóvil", "Apertura de caja fuerte", "Apertura de candado", "Apertura de motocicleta",
     "Apertura de puerta residencial", "Cambio de clave de automóvil", "Cambio de clave de motocicleta",
@@ -313,13 +314,23 @@ def delete_session(sender_id):
 def save_service_request(sender_id, data):
     conn = get_db_connection()
     try:
+        # Definir la zona horaria de Colombia
+        colombia_tz = pytz.timezone('America/Bogota')
+        # Obtener la fecha y hora actual en esa zona horaria
+        now_in_colombia = datetime.now(colombia_tz)
+        current_date = now_in_colombia.strftime('%Y-%m-%d')
+        current_time = now_in_colombia.strftime('%H:%M:%S')
+
         with conn.cursor() as cur:
             raw_phone = sender_id.split(':')[-1]
             phone_number = ''.join(filter(str.isdigit, raw_phone))
-            
+
+            if phone_number.startswith('57'):
+                phone_number = phone_number[2:]
+
             cur.execute("SELECT id_cliente FROM cliente WHERE telefono_c = %s;", (phone_number,))
             client_result = cur.fetchone()
-            
+
             if client_result:
                 client_id = client_result[0]
                 cur.execute("UPDATE cliente SET nombre_c = %s, direccion_c = %s, ciudad_c = %s WHERE id_cliente = %s;",
@@ -329,9 +340,13 @@ def save_service_request(sender_id, data):
                             (data.get('nombre'), phone_number, data.get('direccion'), data.get('ciudad')))
                 client_id = cur.fetchone()[0]
 
+            # Usar la fecha y hora de Colombia en lugar de CURRENT_DATE y CURRENT_TIME
             cur.execute(
-                "INSERT INTO servicio (fecha_s, hora_s, tipo_s, estado_s, monto_pago, metodo_pago, id_cliente, id_cerrajero) VALUES (CURRENT_DATE, CURRENT_TIME, %s, 'pendiente', 0, %s, %s, 1);",
-                (data.get('detalle_servicio'), data.get('metodo_pago'), client_id)
+                """
+                INSERT INTO servicio (fecha_s, hora_s, tipo_s, estado_s, monto_pago, metodo_pago, id_cliente, id_cerrajero)
+                VALUES (%s, %s, %s, 'pendiente', 0, 'Efectivo', %s, 1);
+                """,
+                (current_date, current_time, data.get('detalle_servicio'), client_id)
             )
             conn.commit()
     except Exception as e:
@@ -347,8 +362,7 @@ def get_summary_message(data):
         f"👤 Nombre: {data.get('nombre', 'N/A')}\n" 
         f"🏙️ Ciudad: {data.get('ciudad', 'N/A')}\n" 
         f"📍 Dirección: {data.get('direccion', 'N/A')}\n" 
-        f"🛠️ Servicio: {data.get('detalle_servicio', 'N/A')}\n" 
-        f"💳 Método de pago: {data.get('metodo_pago', 'N/A')}\n\n" 
+        f"🛠️ Servicio: {data.get('detalle_servicio', 'N/A')}\n\n" 
         "Escribe *confirmar* para guardar, *corregir* para cambiar algún dato, o *salir* para cancelar."
     )
 
@@ -407,20 +421,12 @@ def whatsapp_reply():
             choice = int(message_body)
             if 1 <= choice <= len(AVAILABLE_SERVICES):
                 data['detalle_servicio'] = AVAILABLE_SERVICES[choice - 1]
-                session['state'] = 'AWAITING_PAYMENT_METHOD'
-                msg.body("¿Cómo prefieres pagar? (*Efectivo* o *Nequi*)")
+                session['state'] = 'CONFIRMATION'
+                msg.body(get_summary_message(data))
             else:
                 msg.body("Opción no válida. Por favor, responde solo con el *número* del servicio que necesitas.")
         except (ValueError, IndexError):
             msg.body("Respuesta no válida. Por favor, usa solo el *número* del servicio de la lista.")
-
-    elif state == 'AWAITING_PAYMENT_METHOD':
-        if message_body_lower not in ['efectivo', 'nequi']:
-            msg.body("Método de pago no válido. Por favor, elige entre *Efectivo* o *Nequi*.")
-        else:
-            data['metodo_pago'] = message_body.capitalize()
-            session['state'] = 'CONFIRMATION'
-            msg.body(get_summary_message(data))
 
     # --- Flujo de Confirmación y Corrección ---
     elif state == 'CONFIRMATION':
@@ -435,7 +441,7 @@ def whatsapp_reply():
                 msg.body("Lo siento, hubo un error técnico al guardar tu solicitud. Por favor, intenta de nuevo escribiendo *confirmar*.")
         elif message_body_lower == 'corregir':
             session['state'] = 'AWAITING_CORRECTION_FIELD'
-            msg.body("¿Qué dato deseas corregir? Responde con una sola palabra: *nombre*, *ciudad*, *direccion*, *servicio* o *pago*.")
+            msg.body("¿Qué dato deseas corregir? Responde con una sola palabra: *nombre*, *ciudad*, *direccion* o *servicio*.")
         else:
             msg.body("Opción no válida. Por favor, escribe *confirmar* para finalizar, *corregir* para cambiar un dato, o *salir* para cancelar.")
 
@@ -453,11 +459,8 @@ def whatsapp_reply():
         elif field == 'servicio':
             session['state'] = 'CORRECTING_SERVICE_TYPE'
             msg.body(get_service_list_message())
-        elif field == 'pago':
-            session['state'] = 'CORRECTING_PAYMENT_METHOD'
-            msg.body("OK. ¿Cuál es el método de pago correcto? (*Efectivo* o *Nequi*)")
         else:
-            msg.body("No entendí. Por favor, elige una de las opciones: *nombre*, *ciudad*, *direccion*, *servicio*, *pago*.")
+            msg.body("No entendí. Por favor, elige una de las opciones: *nombre*, *ciudad*, *direccion* o *servicio*.")
 
     # --- Estados de Corrección Individuales ---
     elif state == 'CORRECTING_NAME':
@@ -489,14 +492,6 @@ def whatsapp_reply():
                 msg.body("Opción no válida. Por favor, responde solo con el *número* del servicio.")
         except (ValueError, IndexError):
             msg.body("Respuesta no válida. Por favor, usa solo el *número* del servicio.")
-
-    elif state == 'CORRECTING_PAYMENT_METHOD':
-        if message_body_lower not in ['efectivo', 'nequi']:
-            msg.body("Método de pago no válido. Elige *Efectivo* o *Nequi*.")
-        else:
-            data['metodo_pago'] = message_body.capitalize()
-            session['state'] = 'CONFIRMATION'
-            msg.body(f"Dato actualizado.\n\n{get_summary_message(data)}")
     
     else:
         msg.body("Lo siento, ocurrió un error y perdí el hilo de la conversación. Escribe 'hola' para empezar de nuevo.")

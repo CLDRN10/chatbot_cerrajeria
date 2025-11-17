@@ -204,6 +204,11 @@
       lista.forEach(serv => {
         const estadoClase = `estado-${serv.estado.replace(' ', '-')}`;
         const valorFormatted = new Intl.NumberFormat('es-CO').format(serv.valor);
+        const metodoPagoCapitalizado = serv.metodo_pago.charAt(0).toUpperCase() + serv.metodo_pago.slice(1);
+        let telefonoLimpio = serv.telefono_c;
+        if (telefonoLimpio && telefonoLimpio.startsWith('57')) {
+            telefonoLimpio = telefonoLimpio.substring(2);
+        }
 
         const div = document.createElement("div");
         div.className = "service-item";
@@ -218,13 +223,14 @@
             </button>
           </div>
           <p><b>Cliente:</b> ${serv.cliente}</p>
+          <p><b>Teléfono:</b> ${telefonoLimpio}</p>
           <p><b>Dirección:</b> ${serv.direccion}</p>
           <p><b>Municipio:</b> ${serv.municipio}</p>
           <div style="display:flex; gap:20px;">
             <p><b>Fecha:</b> ${serv.fecha}</p>
             <p><b>Hora:</b> ${serv.hora}</p>
           </div>
-          <p><b>Valor:</b> $${valorFormatted}</p>
+          <p><b>Valor:</b> $${valorFormatted} (${metodoPagoCapitalizado})</p>
           <p><b>Cerrajero:</b> ${serv.cerrajero}</p>
         `;
 
@@ -258,7 +264,8 @@
       Swal.fire({
         title: "Cambiar estado", background: "rgba(20, 59, 113, 0.95)", color: "#fff", width: "430px",
         padding: "1.5rem", showConfirmButton: false, showCancelButton: true, cancelButtonText: "Cerrar",
-        cancelButtonColor: "#ffcc33", html: `<div style="display:flex; flex-direction:column; gap:12px; width:100%;">${botonesHtml}</div>`,
+        cancelButtonColor: "#ffcc33", html: `<div style="display:flex; flex-direction:column; gap:12px; width:100%;">
+${botonesHtml}</div>`,
         customClass: { popup: 'swal2-custom' }
       });
     }
