@@ -12,14 +12,11 @@
     background-color: #0B2147;
     color: #fff;
     font-family: Verdana, Geneva, Tahoma, sans-serif;
-
     height: 100vh;
     margin: 0;
-
     display: flex;
     justify-content: center;
     align-items: center;
-
     overflow-y: scroll;
     scrollbar-gutter: stable both-edges;
   }
@@ -28,17 +25,13 @@
     position: relative;
     width: 100%;
     max-width: 430px;
-
     background-color: #143b71cf;
     border-radius: 20px;
-
     padding: 1.6rem 1.4rem;
     padding-top: 5.2rem;
-    
     text-align: center;
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.35);
     animation: fadeIn 0.5s ease;
-
     min-height: 90vh;
     overflow-y: auto;
   }
@@ -87,11 +80,9 @@
     color: #082a65;
     width: 100%;
     border-radius: 14px;
-
     padding: 1rem 1rem;
     font-weight: 600;
     box-shadow: 0 0 12px rgba(0,0,0,0.12);
-    
     display: flex;
     flex-direction: column;
     text-align: left;
@@ -114,6 +105,26 @@
     display: grid;
     gap: 1rem;
   }
+
+  .desglose-pagos {
+    border-top: 1px solid #e9e9e9;
+    margin-top: .85rem;
+    padding-top: .85rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.95rem;
+    font-weight: 500;
+  }
+  .metodo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .metodo img {
+    width: 20px;
+    height: 20px;
+  }
 </style>
 
 </head>
@@ -133,16 +144,28 @@
       <div class="ganancia-card">
         <h5>Ganancia de hoy</h5>
         <p id="gananciaHoy">$0</p>
+        <div class="desglose-pagos">
+          <span class="metodo"><img src="https://cdn-icons-png.flaticon.com/128/15722/15722759.png" alt="Efectivo"><span id="hoyEfectivo">$0</span></span>
+          <span class="metodo"><img src="https://nequi.com.sv/img/icon.png" alt="Transferencia"><span id="hoyNequi">$0</span></span>
+        </div>
       </div>
 
       <div class="ganancia-card">
         <h5>Ganancia de la semana</h5>
         <p id="gananciaSemana">$0</p>
+         <div class="desglose-pagos">
+          <span class="metodo"><img src="https://cdn-icons-png.flaticon.com/128/15722/15722759.png" alt="Efectivo"><span id="semanaEfectivo">$0</span></span>
+          <span class="metodo"><img src="https://nequi.com.sv/img/icon.png" alt="Transferencia"><span id="semanaNequi">$0</span></span>
+        </div>
       </div>
 
       <div class="ganancia-card">
         <h5>Ganancia del mes</h5>
         <p id="gananciaMes">$0</p>
+         <div class="desglose-pagos">
+          <span class="metodo"><img src="https://cdn-icons-png.flaticon.com/128/15722/15722759.png" alt="Efectivo"><span id="mesEfectivo">$0</span></span>
+          <span class="metodo"><img src="https://nequi.com.sv/img/icon.png" alt="Transferencia"><span id="mesNequi">$0</span></span>
+        </div>
       </div>
     </div>
 
@@ -150,40 +173,37 @@
 
   <script>
     document.addEventListener("DOMContentLoaded", () => {
-      calcularGanancias();
+      cargarEstadisticasDesdeAPI();
     });
 
-    function calcularGanancias() {
-      const lista = JSON.parse(localStorage.getItem("servicios")) || [];
+    async function cargarEstadisticasDesdeAPI() {
+      try {
+        const response = await fetch("{{ url_for('get_estadisticas') }}");
+        if (!response.ok) {
+          throw new Error('La respuesta de la red no fue exitosa.');
+        }
+        const data = await response.json();
+        
+        document.getElementById("gananciaHoy").textContent = formatoMoneda(data.hoy.total);
+        document.getElementById("hoyEfectivo").textContent = formatoMoneda(data.hoy.efectivo);
+        document.getElementById("hoyNequi").textContent = formatoMoneda(data.hoy.nequi);
 
-      const hoy = new Date();
-      const inicioSemana = new Date(hoy);
-      inicioSemana.setDate(hoy.getDate() - hoy.getDay());
-      const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+        document.getElementById("gananciaSemana").textContent = formatoMoneda(data.semana.total);
+        document.getElementById("semanaEfectivo").textContent = formatoMoneda(data.semana.efectivo);
+        document.getElementById("semanaNequi").textContent = formatoMoneda(data.semana.nequi);
 
-      let gananciaHoy = 0, gananciaSemana = 0, gananciaMes = 0;
+        document.getElementById("gananciaMes").textContent = formatoMoneda(data.mes.total);
+        document.getElementById("mesEfectivo").textContent = formatoMoneda(data.mes.efectivo);
+        document.getElementById("mesNequi").textContent = formatoMoneda(data.mes.nequi);
 
-      lista.forEach(serv => {
-        const [dia, mes, anio] = serv.fecha.split("/").map(Number);
-        const fechaServ = new Date(anio, mes - 1, dia);
-        let ganancia = serv.cerrajero === "Otro" ? serv.valor * 0.3 : serv.valor;
-
-        if (mismaFecha(fechaServ, hoy)) gananciaHoy += ganancia;
-        if (fechaServ >= inicioSemana && fechaServ <= hoy) gananciaSemana += ganancia;
-        if (fechaServ >= inicioMes && fechaServ <= hoy) gananciaMes += ganancia;
-      });
-
-      document.getElementById("gananciaHoy").textContent = "$" + formato(gananciaHoy);
-      document.getElementById("gananciaSemana").textContent = "$" + formato(gananciaSemana);
-      document.getElementById("gananciaMes").textContent = "$" + formato(gananciaMes);
+      } catch (error) {
+        console.error('Hubo un problema al cargar las estadísticas:', error);
+      }
     }
 
-    function mismaFecha(a, b) {
-      return a.getDate() === b.getDate() && a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear();
-    }
-
-    function formato(num) {
-      return num.toLocaleString("es-CO", { minimumFractionDigits: 0 });
+    function formatoMoneda(num) {
+      const number = typeof num === 'number' ? num : 0;
+      return number.toLocaleString("es-CO", { style: 'currency', currency: 'COP', minimumFractionDigits: 0 });
     }
   </script>
 

@@ -2,7 +2,7 @@ import os
 import json
 import psycopg2
 import psycopg2.extras
-import pytz  # Se importa la nueva librería
+import pytz
 from urllib.parse import urlparse
 from dotenv import load_dotenv
 import logging
@@ -99,12 +99,36 @@ def update_status_from_button():
     conn = None
     try:
         conn = get_db_connection()
-        with conn.cursor() as cur:
-            cur.execute("UPDATE servicio SET estado_s = %s WHERE id_servicio = %s;", (new_status, service_id))
-            conn.commit()
-            if cur.rowcount == 0:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            
+            # 1. Obtener estado actual y ID del cerrajero, bloqueando la fila para la actualización
+            cur.execute("SELECT estado_s, id_cerrajero FROM servicio WHERE id_servicio = %s FOR UPDATE;", (service_id,))
+            service = cur.fetchone()
+
+            if not service:
                 return jsonify({"error": "Servicio no encontrado"}), 404
-            return jsonify({"success": True, "message": "Estado actualizado"})
+
+            old_status = service['estado_s']
+            cerrajero_id = service['id_cerrajero']
+
+            # 2. Solo continuar si el estado realmente ha cambiado
+            if old_status == new_status:
+                return jsonify({"success": True, "message": "El estado no ha cambiado."})
+
+            # 3. Actualizar el estado del servicio
+            cur.execute("UPDATE servicio SET estado_s = %s WHERE id_servicio = %s;", (new_status, service_id))
+            
+            # 4. Insertar el cambio en la tabla de historial
+            cur.execute("""
+                INSERT INTO historial_estado (id_servicio, id_cerrajero, estado_anterior, estado_nuevo)
+                VALUES (%s, %s, %s, %s);
+            """, (service_id, cerrajero_id, old_status, new_status))
+
+            # 5. Confirmar la transacción (ambas operaciones)
+            conn.commit()
+            
+            return jsonify({"success": True, "message": "Estado actualizado y registrado en el historial."})
+            
     except Exception as e:
         if conn: conn.rollback()
         app.logger.error(f"API_UPDATE_STATUS_ERROR: {e}")
@@ -272,7 +296,64 @@ def delete_service(service_id):
     finally:
         if conn: conn.close()
 
-# --- Lógica del Chatbot de WhatsApp (Versión con Hora Correcta) ---
+@app.route("/api/estadisticas", methods=['GET'])
+def get_estadisticas():
+    conn = None
+    try:
+        conn = get_db_connection()
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            
+            def procesar_resultados(rows):
+                stats = {'total': 0, 'efectivo': 0, 'nequi': 0}
+                for row in rows:
+                    total_pago = float(row['total'])
+                    metodo = row['metodo_pago'].lower() 
+                    
+                    if metodo == 'efectivo':
+                        stats['efectivo'] += total_pago
+                    elif metodo == 'nequi':
+                        stats['nequi'] += total_pago
+                
+                stats['total'] = stats['efectivo'] + stats['nequi']
+                return stats
+
+            cur.execute("""
+                SELECT metodo_pago, SUM(monto_pago) as total
+                FROM servicio
+                WHERE estado_s = 'finalizado' AND fecha_s = CURRENT_DATE
+                GROUP BY metodo_pago;
+            """)
+            stats_hoy = procesar_resultados(cur.fetchall())
+
+            cur.execute("""
+                SELECT metodo_pago, SUM(monto_pago) as total
+                FROM servicio
+                WHERE estado_s = 'finalizado' AND fecha_s >= CURRENT_DATE - INTERVAL '7 days'
+                GROUP BY metodo_pago;
+            """)
+            stats_semana = procesar_resultados(cur.fetchall())
+
+            cur.execute("""
+                SELECT metodo_pago, SUM(monto_pago) as total
+                FROM servicio
+                WHERE estado_s = 'finalizado' AND date_trunc('month', fecha_s) = date_trunc('month', CURRENT_DATE)
+                GROUP BY metodo_pago;
+            """)
+            stats_mes = procesar_resultados(cur.fetchall())
+
+            return jsonify({
+                "hoy": stats_hoy,
+                "semana": stats_semana,
+                "mes": stats_mes
+            })
+
+    except Exception as e:
+        app.logger.error(f"API_GET_ESTADISTICAS_ERROR: {e}")
+        return jsonify({"error": "Error interno al obtener las estadísticas", "detalle": str(e)}), 500
+    finally:
+        if conn: conn.close()
+
+# --- Lógica del Chatbot de WhatsApp ---
 AVAILABLE_SERVICES = [
     "Apertura de automóvil", "Apertura de caja fuerte", "Apertura de candado", "Apertura de motocicleta",
     "Apertura de puerta residencial", "Cambio de clave de automóvil", "Cambio de clave de motocicleta",
@@ -314,9 +395,7 @@ def delete_session(sender_id):
 def save_service_request(sender_id, data):
     conn = get_db_connection()
     try:
-        # Definir la zona horaria de Colombia
         colombia_tz = pytz.timezone('America/Bogota')
-        # Obtener la fecha y hora actual en esa zona horaria
         now_in_colombia = datetime.now(colombia_tz)
         current_date = now_in_colombia.strftime('%Y-%m-%d')
         current_time = now_in_colombia.strftime('%H:%M:%S')
@@ -340,7 +419,6 @@ def save_service_request(sender_id, data):
                             (data.get('nombre'), phone_number, data.get('direccion'), data.get('ciudad')))
                 client_id = cur.fetchone()[0]
 
-            # Usar la fecha y hora de Colombia en lugar de CURRENT_DATE y CURRENT_TIME
             cur.execute(
                 """
                 INSERT INTO servicio (fecha_s, hora_s, tipo_s, estado_s, monto_pago, metodo_pago, id_cliente, id_cerrajero)
@@ -397,7 +475,6 @@ def whatsapp_reply():
     state = session.get('state', 'AWAITING_NAME')
     data = session.get('data', {})
 
-    # --- Máquina de Estados Principal ---
     if state == 'AWAITING_NAME':
         data['nombre'] = message_body.title()
         session['state'] = 'AWAITING_CITY'
@@ -428,7 +505,6 @@ def whatsapp_reply():
         except (ValueError, IndexError):
             msg.body("Respuesta no válida. Por favor, usa solo el *número* del servicio de la lista.")
 
-    # --- Flujo de Confirmación y Corrección ---
     elif state == 'CONFIRMATION':
         if message_body_lower == 'confirmar':
             try:
@@ -462,11 +538,10 @@ def whatsapp_reply():
         else:
             msg.body("No entendí. Por favor, elige una de las opciones: *nombre*, *ciudad*, *direccion* o *servicio*.")
 
-    # --- Estados de Corrección Individuales ---
     elif state == 'CORRECTING_NAME':
         data['nombre'] = message_body.title()
         session['state'] = 'CONFIRMATION'
-        msg.body(f"Dato actualizado.\n\n{get_summary_message(data)}")
+        msg.body(f"Dato actualizado.\\n\\n{get_summary_message(data)}")
     
     elif state == 'CORRECTING_CITY':
         if message_body_lower not in ['bucaramanga', 'piedecuesta', 'floridablanca']:
@@ -474,12 +549,12 @@ def whatsapp_reply():
         else:
             data['ciudad'] = message_body.capitalize()
             session['state'] = 'CONFIRMATION'
-            msg.body(f"Dato actualizado.\n\n{get_summary_message(data)}")
+            msg.body(f"Dato actualizado.\\n\\n{get_summary_message(data)}")
             
     elif state == 'CORRECTING_ADDRESS':
         data['direccion'] = message_body
         session['state'] = 'CONFIRMATION'
-        msg.body(f"Dato actualizado.\n\n{get_summary_message(data)}")
+        msg.body(f"Dato actualizado.\\n\\n{get_summary_message(data)}")
 
     elif state == 'CORRECTING_SERVICE_TYPE':
         try:
@@ -487,7 +562,7 @@ def whatsapp_reply():
             if 1 <= choice <= len(AVAILABLE_SERVICES):
                 data['detalle_servicio'] = AVAILABLE_SERVICES[choice - 1]
                 session['state'] = 'CONFIRMATION'
-                msg.body(f"Dato actualizado.\n\n{get_summary_message(data)}")
+                msg.body(f"Dato actualizado.\\n\\n{get_summary_message(data)}")
             else:
                 msg.body("Opción no válida. Por favor, responde solo con el *número* del servicio.")
         except (ValueError, IndexError):
