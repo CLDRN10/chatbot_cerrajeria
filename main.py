@@ -317,28 +317,35 @@ def get_estadisticas():
                 stats['total'] = stats['efectivo'] + stats['nequi']
                 return stats
 
+            # --- CORRECCIÓN: Usar la zona horaria de Colombia ---
+            colombia_tz = pytz.timezone('America/Bogota')
+            today_co = datetime.now(colombia_tz).date()
+
+            # Estadística de Hoy (usando la fecha de Colombia)
             cur.execute("""
                 SELECT metodo_pago, SUM(monto_pago) as total
                 FROM servicio
-                WHERE estado_s = 'finalizado' AND fecha_s = CURRENT_DATE
+                WHERE estado_s = 'finalizado' AND fecha_s = %s
                 GROUP BY metodo_pago;
-            """)
+            """, (today_co,))
             stats_hoy = procesar_resultados(cur.fetchall())
 
+            # Estadística de la Semana (últimos 7 días incluyendo hoy)
             cur.execute("""
                 SELECT metodo_pago, SUM(monto_pago) as total
                 FROM servicio
-                WHERE estado_s = 'finalizado' AND fecha_s >= CURRENT_DATE - INTERVAL '7 days'
+                WHERE estado_s = 'finalizado' AND fecha_s BETWEEN (%s::date - INTERVAL '6 days') AND %s::date
                 GROUP BY metodo_pago;
-            """)
+            """, (today_co, today_co))
             stats_semana = procesar_resultados(cur.fetchall())
 
+            # Estadística del Mes (basado en el mes y año de la fecha de Colombia)
             cur.execute("""
                 SELECT metodo_pago, SUM(monto_pago) as total
                 FROM servicio
-                WHERE estado_s = 'finalizado' AND date_trunc('month', fecha_s) = date_trunc('month', CURRENT_DATE)
+                WHERE estado_s = 'finalizado' AND date_trunc('month', fecha_s) = date_trunc('month', %s::date)
                 GROUP BY metodo_pago;
-            """)
+            """, (today_co,))
             stats_mes = procesar_resultados(cur.fetchall())
 
             return jsonify({
